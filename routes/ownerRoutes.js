@@ -19,6 +19,30 @@ const checkOwnerRole = (req, res, next) => {
 
 router.use(checkOwnerRole);
 
+router.get('/dashboard', async (req, res) => {
+  try {
+    const [properties] = await req.app.locals.db.query('SELECT COUNT(*) as count FROM properties WHERE ownerId = ?', [req.userId]);
+    const [tenants] = await req.app.locals.db.query(
+      `SELECT COUNT(*) as count FROM tenants pt JOIN properties p ON pt.propertyId = p.id WHERE p.ownerId = ? AND pt.status = 'active'`,
+      [req.userId]
+    );
+    const [meters] = await req.app.locals.db.query(
+      `SELECT COUNT(*) as count FROM meters em JOIN properties p ON em.propertyId = p.id WHERE p.ownerId = ?`,
+      [req.userId]
+    );
+    res.json({
+      success: true,
+      data: {
+        properties_count: properties[0].count,
+        active_tenants: tenants[0].count,
+        meters_count: meters[0].count
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 router.get('/properties', async (req, res) => {
   try {
     const [properties] = await req.app.locals.db.query(
@@ -266,6 +290,43 @@ router.get('/properties/:id/bills', async (req, res) => {
     res.json({ success: true, data: bills });
   } catch (error) {
     console.error('Get bills error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+router.get('/tenants', async (req, res) => {
+  try {
+    const [tenants] = await req.app.locals.db.query(
+      `SELECT pt.*, u.name, u.phone, u.email, p.propertyName as property
+       FROM tenants pt 
+       JOIN users u ON pt.userId = u.id 
+       JOIN properties p ON pt.propertyId = p.id
+       WHERE p.ownerId = ?`,
+      [req.userId]
+    );
+    res.json({ success: true, data: tenants });
+  } catch (error) {
+    console.error('List owner tenants error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+router.get('/collections', async (req, res) => {
+  try {
+    const [collections] = await req.app.locals.db.query(
+      `SELECT p.id, p.amount, p.paymentMethod, p.status, p.createdAt, p.transactionId,
+              b.month, b.year, em.meterNumber, pr.propertyName 
+       FROM payments p
+       JOIN bills b ON p.billId = b.id
+       JOIN meters em ON b.meterId = em.id
+       JOIN properties pr ON em.propertyId = pr.id
+       WHERE pr.ownerId = ? 
+       ORDER BY p.createdAt DESC`,
+      [req.userId]
+    );
+    res.json({ success: true, data: collections });
+  } catch (error) {
+    console.error('Owner collections error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });

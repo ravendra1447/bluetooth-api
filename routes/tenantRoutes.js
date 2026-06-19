@@ -135,4 +135,63 @@ router.get('/current-bill', async (req, res) => {
   }
 });
 
+router.get('/usage', async (req, res) => {
+  try {
+    const [assignments] = await req.app.locals.db.query(
+      'SELECT propertyId FROM tenants WHERE userId = ? AND status = "active"',
+      [req.userId]
+    );
+    if (assignments.length === 0) return res.status(404).json({ success: false, message: 'No active property linked to your account.' });
+
+    const [bills] = await req.app.locals.db.query(
+      `SELECT b.month, b.year, b.units
+       FROM bills b 
+       JOIN meters em ON b.meterId = em.id 
+       WHERE em.propertyId = ? 
+       ORDER BY b.year DESC, b.month DESC LIMIT 12`,
+      [assignments[0].propertyId]
+    );
+    res.json({ success: true, data: bills });
+  } catch (error) {
+    console.error('Tenant usage error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+router.get('/notifications', async (req, res) => {
+  try {
+    res.json({ success: true, data: [] });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+router.post('/relay-toggle', async (req, res) => {
+  try {
+    const { relayStatus } = req.body;
+    
+    const [assignments] = await req.app.locals.db.query(
+      'SELECT propertyId FROM tenants WHERE userId = ? AND status = "active"',
+      [req.userId]
+    );
+    if (assignments.length === 0) return res.status(404).json({ success: false, message: 'No property found.' });
+
+    const [meters] = await req.app.locals.db.query('SELECT id FROM meters WHERE propertyId = ?', [assignments[0].propertyId]);
+    if (meters.length === 0) return res.status(404).json({ success: false, message: 'No meter found.' });
+    
+    const meterId = meters[0].id;
+    await req.app.locals.db.query('UPDATE meters SET relayStatus = ?, lastTrip = NOW() WHERE id = ?', [relayStatus, meterId]);
+    
+    await req.app.locals.db.query(
+      'INSERT INTO relay_logs (meterId, relayStatus, reason) VALUES (?, ?, ?)',
+      [meterId, relayStatus, 'Manual Toggle by Tenant']
+    );
+
+    res.json({ success: true, message: `Relay manually set to ${relayStatus}` });
+  } catch (error) {
+    console.error('Relay toggle error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 module.exports = router;

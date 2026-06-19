@@ -374,4 +374,23 @@ router.delete('/meters/:id', async (req, res) => {
   }
 });
 
+router.get('/reports', async (req, res) => {
+  try {
+    const [payments] = await req.app.locals.db.query(
+      `SELECT p.id, p.amount, p.paymentMethod, p.status, p.createdAt,
+              b.month, b.year, em.meterNumber, pr.propertyName, u.name as ownerName
+       FROM payments p
+       JOIN bills b ON p.billId = b.id
+       JOIN meters em ON b.meterId = em.id
+       JOIN properties pr ON em.propertyId = pr.id
+       JOIN users u ON pr.ownerId = u.id
+       ORDER BY p.createdAt DESC`
+    );
+    res.json({ success: true, data: payments });
+  } catch (error) {
+    console.error('Master reports error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 module.exports = router;

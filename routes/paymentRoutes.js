@@ -105,4 +105,31 @@ router.get('/relay-logs/:meterId', async (req, res) => {
   }
 });
 
+router.post('/sync-meter', async (req, res) => {
+  try {
+    const { meterNumber, balance, remainingUnits, relayStatus } = req.body;
+    
+    if (!meterNumber) {
+      return res.status(422).json({ success: false, message: 'meterNumber is required.' });
+    }
+
+    const [meters] = await req.app.locals.db.query('SELECT id FROM meters WHERE meterNumber = ?', [meterNumber]);
+    if (meters.length === 0) {
+      return res.status(404).json({ success: false, message: 'Meter not found in database.' });
+    }
+
+    const meterId = meters[0].id;
+    
+    await req.app.locals.db.query(
+      'UPDATE meters SET balance = ?, remainingUnits = ?, relayStatus = ?, lastTrip = NOW() WHERE id = ?',
+      [balance || 0, remainingUnits || 0, relayStatus || 'ON', meterId]
+    );
+
+    res.json({ success: true, message: 'Meter data synced successfully.' });
+  } catch (error) {
+    console.error('Meter sync error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
