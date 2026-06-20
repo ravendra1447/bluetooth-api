@@ -1,65 +1,134 @@
 const db = require('../config/db');
 
-exports.dailyUsage = async (req, res) => {
+exports.getDailyUsage = async (req, res) => {
   try {
-    const meterId = req.params.meterId;
-    const [rows] = await db.query(
-      `SELECT DATE(createdAt) as day, MAX(totalReading) as totalReading
-       FROM meter_readings 
-       WHERE meterId = ? AND MONTH(createdAt) = MONTH(CURDATE()) AND YEAR(createdAt) = YEAR(CURDATE())
-       GROUP BY DATE(createdAt)
-       ORDER BY day ASC`,
+    const { meterId } = req.params;
+    // Assuming meterId passed here is the actual ID from electricity_meters
+    const [data] = await db.query(
+      `SELECT reading_date as date, total_reading as totalReading, daily_consumption as dailyConsumption 
+       FROM daily_readings WHERE meter_id = ? ORDER BY reading_date DESC LIMIT 30`,
       [meterId]
     );
-
-    let result = [];
-    for (let i = 0; i < rows.length; i++) {
-      let consumption = 0;
-      if (i > 0) {
-        consumption = rows[i].totalReading - rows[i - 1].totalReading;
-      }
-      result.push({
-        date: rows[i].day,
-        totalReading: rows[i].totalReading,
-        dailyConsumption: consumption
-      });
-    }
-
-    res.json({ success: true, data: result });
+    res.json({ success: true, data });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
 };
 
-exports.hourlyUsage = async (req, res) => {
+exports.getUsageSummary = async (req, res) => {
   try {
-    const meterId = req.params.meterId;
-    // Get readings for the current day, grouped by hour
-    const [rows] = await db.query(
-      `SELECT HOUR(createdAt) as hour, MAX(totalReading) as totalReading
-       FROM meter_readings 
-       WHERE meterId = ? AND DATE(createdAt) = CURDATE()
-       GROUP BY HOUR(createdAt)
-       ORDER BY hour ASC`,
+    const { meterId } = req.params;
+
+    // Fetch daily readings for up to 30 days
+    const [readings] = await db.query(
+      `SELECT reading_date, daily_consumption FROM daily_readings 
+       WHERE meter_id = ? AND reading_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) 
+       ORDER BY reading_date DESC`,
       [meterId]
     );
 
-    let result = [];
-    for (let i = 0; i < rows.length; i++) {
-      let consumption = 0;
-      if (i > 0) {
-        consumption = rows[i].totalReading - rows[i - 1].totalReading;
-      }
-      result.push({
-        hour: rows[i].hour,
-        totalReading: rows[i].totalReading,
-        hourlyConsumption: consumption,
-        isPeakHour: rows[i].hour >= 18 && rows[i].hour <= 22 // 6 PM to 10 PM
-      });
-    }
+    let today = 0, yesterday = 0, last7Days = 0, last15Days = 0, monthly = 0;
+    
+    // Parse today's and yesterday's date
+    const dToday = new Date().toISOString().split('T')[0];
+    const dYesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-    res.json({ success: true, data: result });
+    readings.forEach((r) => {
+      const dateStr = new Date(r.reading_date).toISOString().split('T')[0];
+      const cons = parseFloat(r.daily_consumption) || 0;
+
+      if (dateStr === dToday) today = cons;
+      if (dateStr === dYesterday) yesterday = cons;
+
+      // 7 Days
+      if (new Date(r.reading_date) >= new Date(Date.now() - 7 * 86400000)) last7Days += cons;
+      // 15 Days
+      if (new Date(r.reading_date) >= new Date(Date.now() - 15 * 86400000)) last15Days += cons;
+      // Monthly (current month)
+      if (new Date(r.reading_date).getMonth() === new Date().getMonth()) monthly += cons;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        today: today.toFixed(2),
+        yesterday: yesterday.toFixed(2),
+        last7Days: last7Days.toFixed(2),
+        last15Days: last15Days.toFixed(2),
+        monthly: monthly.toFixed(2)
+      }
+    });
   } catch (err) {
     res.json({ success: false, message: err.message });
+  }
+};
+
+exports.getMonthlyUsage = async (req, res) => {
+  try {
+    const { meterId } = req.params;
+    const [meter] = await db.query(`SELECT * FROM electricity_meters WHERE id = ?`, [meterId]);
+    
+    if (meter.length === 0) return res.json({ success: false, message: 'Meter not found' });
+    
+    const m = meter[0];
+    res.json({
+      success: true,
+      data: {
+        month: new Date().toLocaleString('default', { month: 'long' }),
+        startReading: m.month_start_reading,
+        currentReading: m.last_reading,
+        monthlyConsumption: m.monthly_consumption
+      }
+    });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+};
+
+exports.monthlyFreeze = async (req, res) => {
+  try {
+    const [meters] = await db.query(`SELECT * FROM electricity_meters WHERE status='active'`);
+
+    for (const meter of meters) {
+      const endReading = meter.last_reading || 0;
+      const startReading = meter.month_start_reading || 0;
+      const consumption = endReading - startReading;
+      const tariff = meter.tariff_per_unit || 8;
+      const bill = consumption * tariff;
+      const outstanding = (meter.outstanding || 0) + bill;
+
+      await db.query(
+        `INSERT INTO monthly_freeze(meter_id, month, year, start_reading, end_reading, monthly_consumption, bill_amount, tariff, outstanding)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          meter.id,
+          new Date().getMonth() + 1,
+          new Date().getFullYear(),
+          startReading,
+          endReading,
+          consumption,
+          bill,
+          tariff,
+          outstanding
+        ]
+      );
+
+      await db.query(
+        `UPDATE electricity_meters SET month_start_reading = ?, monthly_consumption = 0, outstanding = ? WHERE id = ?`,
+        [endReading, outstanding, meter.id]
+      );
+    }
+
+    if (res) {
+      res.json({ success: true });
+    } else {
+      console.log('Cron Job: Monthly Freeze executed successfully.');
+    }
+  } catch (err) {
+    if (res) {
+      res.json({ success: false, message: err.message });
+    } else {
+      console.error('Cron Job Error:', err);
+    }
   }
 };

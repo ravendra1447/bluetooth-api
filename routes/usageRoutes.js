@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const usage = require('../controllers/usageController');
+const usageController = require('../controllers/usageController');
 
-router.get('/usage/daily/:meterId', usage.dailyUsage);
-router.get('/usage/hourly/:meterId', usage.hourlyUsage);
+router.get('/daily/:meterId', usageController.getDailyUsage);
+router.get('/monthly/:meterId', usageController.getMonthlyUsage);
+router.get('/summary/:meterId', usageController.getUsageSummary);
+router.post('/freeze/monthly', usageController.monthlyFreeze);
 
 module.exports = router;

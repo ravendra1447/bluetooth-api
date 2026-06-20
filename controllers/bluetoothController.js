@@ -2,12 +2,12 @@ const db = require('../config/db');
 
 exports.saveReading = async (req, res) => {
   try {
-    const { meterId, totalReading, voltage, current } = req.body;
+    const { meterId, totalReading } = req.body;
 
-    // If meterId is a number, check by id, otherwise check by meterNumber
+    // Fetch actual meter
     const [meter] = await db.query(
-      `SELECT * FROM meters WHERE id = ? OR meterNumber = ?`,
-      [meterId, meterId]
+      `SELECT * FROM electricity_meters WHERE meter_number = ?`,
+      [meterId]
     );
 
     if (meter.length === 0) {
@@ -15,34 +15,53 @@ exports.saveReading = async (req, res) => {
     }
 
     const actualMeterId = meter[0].id;
+    const lastReading = meter[0].last_reading || 0;
+    
+    // Calculate daily consumption simply for now
+    let dailyConsumption = totalReading - lastReading;
+    if (dailyConsumption < 0) dailyConsumption = 0; // Prevent negative
+    
+    // Create the table automatically if it doesn't exist
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS daily_readings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        meter_id INT NOT NULL,
+        reading_date DATE,
+        total_reading DECIMAL(10,2) DEFAULT 0,
+        daily_consumption DECIMAL(10,2) DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (meter_id) REFERENCES electricity_meters(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_daily_reading (meter_id, reading_date)
+      )
+    `);
 
-    const m = meter[0];
-    const monthlyUsage = totalReading - m.monthStartReading;
-    let dailyConsumption = 0;
+    // Insert into daily readings or update if today's record already exists
+    await db.query(
+      `INSERT INTO daily_readings (meter_id, reading_date, total_reading, daily_consumption) 
+       VALUES (?, CURDATE(), ?, ?) 
+       ON DUPLICATE KEY UPDATE 
+       total_reading = VALUES(total_reading), 
+       daily_consumption = VALUES(daily_consumption)`,
+      [actualMeterId, totalReading, dailyConsumption]
+    );
 
-    const [prev] = await db.query(
-      `SELECT totalReading FROM meter_readings WHERE meterId = ? ORDER BY id DESC LIMIT 1`,
+    // Calculate monthly consumption (Sum of all daily consumptions for current month)
+    const [monthlyData] = await db.query(
+      `SELECT SUM(daily_consumption) as total_monthly FROM daily_readings WHERE meter_id = ? AND MONTH(reading_date) = MONTH(CURDATE()) AND YEAR(reading_date) = YEAR(CURDATE())`,
       [actualMeterId]
     );
+    const monthlyUsage = monthlyData[0].total_monthly || dailyConsumption;
 
-    if (prev.length > 0) {
-      dailyConsumption = totalReading - prev[0].totalReading;
-    }
-
+    // Update main electricity_meters table
     await db.query(
-      `INSERT INTO meter_readings(meterId, readingDate, totalReading, dailyConsumption, voltage, current) VALUES(?, ?, ?, ?, ?, ?)`,
-      [actualMeterId, new Date(), totalReading, dailyConsumption, voltage, current]
-    );
-
-    await db.query(
-      `UPDATE meters SET currentReading = ?, monthlyUsage = ? WHERE id = ?`,
-      [totalReading, monthlyUsage, actualMeterId]
+      `UPDATE electricity_meters SET last_reading = ? WHERE id = ?`,
+      [totalReading, actualMeterId]
     );
 
     res.json({
       success: true,
       dailyConsumption,
-      monthlyUsage
+      monthlyUsage,
     });
   } catch (err) {
     res.json({ success: false, message: err.message });

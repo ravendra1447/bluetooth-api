@@ -148,6 +148,43 @@ async function setupDatabase() {
     `);
     console.log('✅ Relay logs table created');
 
+    // Create monthly_freeze table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS monthly_freeze (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        meter_id BIGINT,
+        month INT,
+        year INT,
+        start_reading DECIMAL(12,2),
+        end_reading DECIMAL(12,2),
+        monthly_consumption DECIMAL(12,2),
+        bill_amount DECIMAL(12,2),
+        tariff DECIMAL(10,2),
+        outstanding DECIMAL(12,2),
+        freeze_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ Monthly freeze table created');
+
+    // Alter electricity_meters to add necessary columns
+    try {
+      await connection.query(`
+        ALTER TABLE electricity_meters 
+        ADD COLUMN month_start_reading DECIMAL(12,2) DEFAULT 0,
+        ADD COLUMN monthly_consumption DECIMAL(12,2) DEFAULT 0,
+        ADD COLUMN outstanding DECIMAL(12,2) DEFAULT 0
+      `);
+      console.log('✅ Electricity meters altered successfully');
+    } catch (e) {
+      if (e.code === 'ER_DUP_FIELDNAME') {
+        console.log('ℹ️ Columns already exist in electricity_meters');
+      } else {
+        console.error('⚠️ Error altering electricity_meters:', e.message);
+      }
+    }
+
+    console.log('=================================');
+
     // Insert default master user
     const [existingMaster] = await connection.query('SELECT id FROM users WHERE mobile = ?', ['9999999999']);
     if (existingMaster.length === 0) {

@@ -49,3 +49,16 @@ cron.schedule('0 0 * * *', async () => {
         console.error('Error in cron job:', err);
     }
 });
+
+const usageController = require('../controllers/usageController');
+
+// Run at 23:59 on the last day of every month
+cron.schedule('59 23 * * *', async () => {
+    // node-cron does not support 'L', so we run daily and check if tomorrow is the 1st
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (tomorrow.getDate() === 1) {
+        console.log('Running monthly freeze cron job...');
+        await usageController.monthlyFreeze();
+    }
+});
