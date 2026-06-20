@@ -4,14 +4,17 @@ exports.saveReading = async (req, res) => {
   try {
     const { meterId, totalReading, voltage, current } = req.body;
 
+    // If meterId is a number, check by id, otherwise check by meterNumber
     const [meter] = await db.query(
-      `SELECT * FROM meters WHERE id = ?`,
-      [meterId]
+      `SELECT * FROM meters WHERE id = ? OR meterNumber = ?`,
+      [meterId, meterId]
     );
 
     if (meter.length === 0) {
       return res.json({ success: false, message: 'Meter not found' });
     }
+
+    const actualMeterId = meter[0].id;
 
     const m = meter[0];
     const monthlyUsage = totalReading - m.monthStartReading;
@@ -19,7 +22,7 @@ exports.saveReading = async (req, res) => {
 
     const [prev] = await db.query(
       `SELECT totalReading FROM meter_readings WHERE meterId = ? ORDER BY id DESC LIMIT 1`,
-      [meterId]
+      [actualMeterId]
     );
 
     if (prev.length > 0) {
@@ -28,12 +31,12 @@ exports.saveReading = async (req, res) => {
 
     await db.query(
       `INSERT INTO meter_readings(meterId, readingDate, totalReading, dailyConsumption, voltage, current) VALUES(?, ?, ?, ?, ?, ?)`,
-      [meterId, new Date(), totalReading, dailyConsumption, voltage, current]
+      [actualMeterId, new Date(), totalReading, dailyConsumption, voltage, current]
     );
 
     await db.query(
       `UPDATE meters SET currentReading = ?, monthlyUsage = ? WHERE id = ?`,
-      [totalReading, monthlyUsage, meterId]
+      [totalReading, monthlyUsage, actualMeterId]
     );
 
     res.json({
