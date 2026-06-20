@@ -144,8 +144,8 @@ exports.bindMeter = async (req, res) => {
             const userName = name && name.trim() !== '' ? name.trim() : 'Tenant';
 
             const [result] = await connection.query(
-                `INSERT INTO users (name, mobile, email, password, role, created_at) 
-                 VALUES (?, ?, ?, ?, 'tenant', NOW())`,
+                `INSERT INTO users (name, mobile, email, password, role) 
+                 VALUES (?, ?, ?, ?, 'tenant')`,
                 [userName, validatedMobile, validEmail, 'password123']
             );
 
@@ -174,8 +174,8 @@ exports.bindMeter = async (req, res) => {
             const propertyCode = 'P-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
 
             const [propertyResult] = await connection.query(
-                `INSERT INTO properties (owner_id, property_code, name, address, city, created_at) 
-                 VALUES (?, ?, ?, ?, 'City', NOW())`,
+                `INSERT INTO properties (owner_id, property_code, name, address, city) 
+                 VALUES (?, ?, ?, ?, 'City')`,
                 [ownerId, propertyCode, `Property for ${validatedMeterId}`, address || 'No Address']
             );
 
@@ -183,8 +183,8 @@ exports.bindMeter = async (req, res) => {
 
             await connection.query(
                 `INSERT INTO electricity_meters 
-                 (property_id, meter_name, meter_number, meter_type, current_balance, tariff_per_unit, relay_status, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, 'on', NOW())`,
+                 (property_id, meter_name, meter_number, meter_type, current_balance, tariff_per_unit, relay_status) 
+                 VALUES (?, ?, ?, ?, ?, ?, 'on')`,
                 [propertyId, 'Main Meter', validatedMeterId, meterType, 0.0, 5.0]
             );
         } else {
@@ -200,8 +200,8 @@ exports.bindMeter = async (req, res) => {
 
         if (existingTenant.length === 0) {
             await connection.query(
-                `INSERT INTO property_tenants (property_id, tenant_id, move_in_date, status, created_at) 
-                 VALUES (?, ?, CURDATE(), 'active', NOW())`,
+                `INSERT INTO property_tenants (property_id, tenant_id, move_in_date, status) 
+                 VALUES (?, ?, CURDATE(), 'active')`,
                 [propertyId, userId]
             );
         } else if (existingTenant[0].status !== 'active') {
