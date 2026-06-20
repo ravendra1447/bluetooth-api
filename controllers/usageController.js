@@ -3,10 +3,14 @@ const db = require('../config/db');
 exports.getDailyUsage = async (req, res) => {
   try {
     const { meterId } = req.params;
-    // Assuming meterId passed here is the actual ID from electricity_meters
+    
+    // Join with electricity_meters to match the meter_number string (e.g. SWB260514510001)
     const [data] = await db.query(
-      `SELECT reading_date as date, total_reading as totalReading, daily_consumption as dailyConsumption 
-       FROM daily_readings WHERE meter_id = ? ORDER BY reading_date DESC LIMIT 30`,
+      `SELECT d.reading_date as date, d.total_reading as totalReading, d.daily_consumption as dailyConsumption 
+       FROM daily_readings d
+       JOIN electricity_meters m ON d.meter_id = m.id
+       WHERE m.meter_number = ? 
+       ORDER BY d.reading_date DESC LIMIT 30`,
       [meterId]
     );
     res.json({ success: true, data });
@@ -21,9 +25,11 @@ exports.getUsageSummary = async (req, res) => {
 
     // Fetch daily readings for up to 30 days
     const [readings] = await db.query(
-      `SELECT reading_date, daily_consumption FROM daily_readings 
-       WHERE meter_id = ? AND reading_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) 
-       ORDER BY reading_date DESC`,
+      `SELECT d.reading_date, d.daily_consumption 
+       FROM daily_readings d
+       JOIN electricity_meters m ON d.meter_id = m.id
+       WHERE m.meter_number = ? AND d.reading_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) 
+       ORDER BY d.reading_date DESC`,
       [meterId]
     );
 
@@ -66,7 +72,7 @@ exports.getUsageSummary = async (req, res) => {
 exports.getMonthlyUsage = async (req, res) => {
   try {
     const { meterId } = req.params;
-    const [meter] = await db.query(`SELECT * FROM electricity_meters WHERE id = ?`, [meterId]);
+    const [meter] = await db.query(`SELECT * FROM electricity_meters WHERE meter_number = ?`, [meterId]);
     
     if (meter.length === 0) return res.json({ success: false, message: 'Meter not found' });
     
