@@ -263,11 +263,16 @@ exports.getDashboard = async (req, res) => {
         const meter = rows[0];
 
         // Get today's consumption
-        const [todayConsumption] = await db.query(`
-            SELECT COALESCE(SUM(units), 0) as today_units
-            FROM bills 
-            WHERE meter_id = ?
-        `, [meter.id]);
+        let todayConsumption = [{ today_units: 0 }];
+        try {
+            [todayConsumption] = await db.query(`
+                SELECT COALESCE(SUM(units), 0) as today_units
+                FROM bills 
+                WHERE meter_id = ?
+            `, [meter.id]);
+        } catch (err) {
+            console.error("Error fetching bills for today_units:", err.message);
+        }
 
         const data = {
             meterId: meter.meter_number,
@@ -283,8 +288,24 @@ exports.getDashboard = async (req, res) => {
             todayConsumption: parseFloat(todayConsumption[0].today_units || 0),
             overdraftLimit: 100.00,
             overdraftActive: true,
-            disconnectSchedule: '7th of every month',
+            disconnectSchedule: 'Not Set',
             lastSync: new Date().toISOString()
+        };
+
+        // Get paginated payments
+        let payments = [];
+        try {
+            [payments] = await db.query(`
+                SELECT p.amount, p.status, p.payment_method,
+                       b.bill_amount, b.units, b.month, b.year
+                FROM payments p 
+                JOIN bills b ON p.bill_id = b.id 
+                WHERE b.meter_id = ? 
+                ORDER BY p.id DESC 
+                LIMIT ?
+            `, [meter.id, 5]);
+        } catch (err) {
+            console.error("Error fetching payments/bills:", err.message);
         };
 
         return res.status(200).json({
@@ -329,13 +350,18 @@ exports.getConsumption = async (req, res) => {
 
         const meterId_db = meterCheck[0].id;
 
-        const [bills] = await db.query(`
-            SELECT month, year, units, amount
-            FROM bills 
-            WHERE meter_id = ? 
-            ORDER BY year DESC, month DESC 
-            LIMIT ?
-        `, [meterId_db, months]);
+        let bills = [];
+        try {
+            [bills] = await db.query(`
+                SELECT month, year, units, amount
+                FROM bills 
+                WHERE meter_id = ? 
+                ORDER BY year DESC, month DESC 
+                LIMIT ?
+            `, [meterId_db, months]);
+        } catch (err) {
+            console.error('Error fetching bills:', err.message);
+        }
 
         let totalConsumption = 0;
         let totalBill = 0;
@@ -561,15 +587,20 @@ exports.getHistory = async (req, res) => {
         const total = countResult[0].total;
 
         // Get paginated payments
-        const [payments] = await db.query(`
-            SELECT p.amount, p.status, p.payment_method,
-                   b.bill_amount, b.units, b.month, b.year
-            FROM payments p 
-            JOIN bills b ON p.bill_id = b.id 
-            WHERE b.meter_id = ?
-            ORDER BY p.created_at DESC 
-            LIMIT ? OFFSET ?
-        `, [meterId_db, limit, offset]);
+        let payments = [];
+        try {
+            [payments] = await db.query(`
+                SELECT p.amount, p.status, p.payment_method,
+                       b.bill_amount, b.units, b.month, b.year
+                FROM payments p 
+                LEFT JOIN bills b ON p.bill_id = b.id 
+                WHERE b.meter_id = ?
+                ORDER BY p.created_at DESC 
+                LIMIT ? OFFSET ?
+            `, [meterId_db, limit, offset]);
+        } catch (err) {
+            console.error('Error fetching payments:', err.message);
+        }
 
         let runningBalance = 0;
 
