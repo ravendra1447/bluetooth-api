@@ -266,7 +266,7 @@ exports.getDashboard = async (req, res) => {
         const [todayConsumption] = await db.query(`
             SELECT COALESCE(SUM(units), 0) as today_units
             FROM bills 
-            WHERE meter_id = ? AND DATE(created_at) = CURDATE()
+            WHERE meter_id = ?
         `, [meter.id]);
 
         const data = {
@@ -330,7 +330,7 @@ exports.getConsumption = async (req, res) => {
         const meterId_db = meterCheck[0].id;
 
         const [bills] = await db.query(`
-            SELECT month, year, units, amount, created_at
+            SELECT month, year, units, amount
             FROM bills 
             WHERE meter_id = ? 
             ORDER BY year DESC, month DESC 
@@ -354,7 +354,7 @@ exports.getConsumption = async (req, res) => {
                 month: date.toLocaleString('default', { month: 'short', year: 'numeric' }),
                 kwh: units,
                 bill: amount,
-                date: b.created_at ? new Date(b.created_at).toISOString().split('T')[0] : null
+                date: null
             };
         });
 
@@ -562,7 +562,7 @@ exports.getHistory = async (req, res) => {
 
         // Get paginated payments
         const [payments] = await db.query(`
-            SELECT p.amount, p.status, p.created_at, p.payment_method,
+            SELECT p.amount, p.status, p.payment_method,
                    b.bill_amount, b.units, b.month, b.year
             FROM payments p 
             JOIN bills b ON p.bill_id = b.id 
@@ -585,7 +585,7 @@ exports.getHistory = async (req, res) => {
                 amount: amount,
                 type: type,
                 status: p.status === 'success' ? 'Success' : 'Failed',
-                date: new Date(p.created_at).toISOString(),
+                date: new Date().toISOString(),
                 balance: parseFloat(runningBalance.toFixed(2)),
                 reference: `TXN-${Date.now()}-${index}`,
                 paymentMethod: p.payment_method || 'N/A',
@@ -696,7 +696,7 @@ exports.getProfile = async (req, res) => {
         }
 
         const [users] = await db.query(
-            `SELECT id, name, mobile, email, role, created_at FROM users WHERE id = ?`,
+            `SELECT id, name, mobile, email, role FROM users WHERE id = ?`,
             [userId]
         );
 
@@ -733,7 +733,7 @@ exports.getProfile = async (req, res) => {
                 mobile: user.mobile,
                 email: user.email || '',
                 role: user.role,
-                joinedDate: user.created_at ? new Date(user.created_at).toISOString().split('T')[0] : null,
+                joinedDate: null,
                 metersCount: metersCount[0].count || 0,
                 activeMeters: activeMeters.map(m => ({
                     meterNumber: m.meter_number,
