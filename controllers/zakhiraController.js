@@ -97,7 +97,7 @@ exports.bindMeter = async (req, res) => {
         } = req.body;
 
         // Support both camelCase and snake_case for meterType
-        const meterType = req.body.meterType || req.body.meter_type || 'prepaid';
+        const meterType = req.body.meterType || req.body.meter_type || 'non-prepaid';
 
         // Validate required fields
         const validatedMeterId = validateMeterId(meterId || req.body.meter_number || req.body.meter_id);
