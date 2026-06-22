@@ -72,28 +72,41 @@ async function setupDatabase() {
     `);
     console.log('✅ Property tenants table created');
 
-    // Create electricity_meters table
+    // Create meters table
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS electricity_meters (
+      CREATE TABLE IF NOT EXISTS meters (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        property_id INT NOT NULL,
-        meter_name VARCHAR(255) NOT NULL,
-        meter_number VARCHAR(50) UNIQUE NOT NULL,
-        model_number VARCHAR(100),
-        series_number VARCHAR(100) UNIQUE,
-        meter_type ENUM('prepaid', 'postpaid') DEFAULT 'prepaid',
-        initial_balance DECIMAL(10, 2) DEFAULT 0,
+        property_id INT,
+        meterNo VARCHAR(50) UNIQUE NOT NULL,
+        customerName VARCHAR(100),
+        address TEXT,
+        meterType VARCHAR(20) DEFAULT 'prepaid',
+        relayStatus VARCHAR(20) DEFAULT 'ON',
         current_balance DECIMAL(10, 2) DEFAULT 0,
-        tariff_per_unit DECIMAL(10, 2) DEFAULT 0,
         last_reading DECIMAL(10, 2) DEFAULT 0,
-        relay_status ENUM('ON', 'OFF') DEFAULT 'ON',
         status ENUM('active', 'inactive') DEFAULT 'active',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        month_start_reading DECIMAL(12,2) DEFAULT 0,
+        monthly_consumption DECIMAL(12,2) DEFAULT 0,
+        outstanding DECIMAL(12,2) DEFAULT 0,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
       )
     `);
-    console.log('✅ Electricity meters table created');
+    console.log('✅ Meters table created');
+
+    // Create tariffs table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS tariffs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        meterNo VARCHAR(50),
+        rate DECIMAL(10,2),
+        effectiveFrom DATE,
+        status VARCHAR(20),
+        FOREIGN KEY (meterNo) REFERENCES meters(meterNo) ON DELETE CASCADE
+      )
+    `);
+    console.log('✅ Tariffs table created');
 
     // Create bills table
     await connection.query(`
@@ -114,7 +127,7 @@ async function setupDatabase() {
         status ENUM('pending', 'paid', 'overdue') DEFAULT 'pending',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (meter_id) REFERENCES electricity_meters(id) ON DELETE CASCADE,
+        FOREIGN KEY (meter_id) REFERENCES meters(id) ON DELETE CASCADE,
         UNIQUE KEY unique_meter_month_year (meter_id, month, year)
       )
     `);
@@ -143,7 +156,7 @@ async function setupDatabase() {
         relay_status ENUM('ON', 'OFF') NOT NULL,
         reason VARCHAR(255),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (meter_id) REFERENCES electricity_meters(id) ON DELETE CASCADE
+        FOREIGN KEY (meter_id) REFERENCES meters(id) ON DELETE CASCADE
       )
     `);
     console.log('✅ Relay logs table created');
@@ -166,20 +179,20 @@ async function setupDatabase() {
     `);
     console.log('✅ Monthly freeze table created');
 
-    // Alter electricity_meters to add necessary columns
+    // Alter meters to add necessary columns (already added in CREATE TABLE but keeping try/catch if needed)
     try {
       await connection.query(`
-        ALTER TABLE electricity_meters 
+        ALTER TABLE meters 
         ADD COLUMN month_start_reading DECIMAL(12,2) DEFAULT 0,
         ADD COLUMN monthly_consumption DECIMAL(12,2) DEFAULT 0,
         ADD COLUMN outstanding DECIMAL(12,2) DEFAULT 0
       `);
-      console.log('✅ Electricity meters altered successfully');
+      console.log('✅ Meters altered successfully');
     } catch (e) {
       if (e.code === 'ER_DUP_FIELDNAME') {
-        console.log('ℹ️ Columns already exist in electricity_meters');
+        console.log('ℹ️ Columns already exist in meters');
       } else {
-        console.error('⚠️ Error altering electricity_meters:', e.message);
+        console.error('⚠️ Error altering meters:', e.message);
       }
     }
 

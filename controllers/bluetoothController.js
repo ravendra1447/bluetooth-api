@@ -6,7 +6,7 @@ exports.saveReading = async (req, res) => {
 
     // Fetch actual meter
     const [meter] = await db.query(
-      `SELECT * FROM electricity_meters WHERE meter_number = ?`,
+      `SELECT * FROM meters WHERE meterNo = ?`,
       [meterId]
     );
 
@@ -30,7 +30,7 @@ exports.saveReading = async (req, res) => {
         total_reading DECIMAL(10,2) DEFAULT 0,
         daily_consumption DECIMAL(10,2) DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (meter_id) REFERENCES electricity_meters(id) ON DELETE CASCADE,
+        FOREIGN KEY (meter_id) REFERENCES meters(id) ON DELETE CASCADE,
         UNIQUE KEY unique_daily_reading (meter_id, reading_date)
       )
     `);
@@ -52,9 +52,9 @@ exports.saveReading = async (req, res) => {
     );
     const monthlyUsage = monthlyData[0].total_monthly || dailyConsumption;
 
-    // Update main electricity_meters table
+    // Update main meters table
     await db.query(
-      `UPDATE electricity_meters SET last_reading = ? WHERE id = ?`,
+      `UPDATE meters SET last_reading = ? WHERE id = ?`,
       [totalReading, actualMeterId]
     );
 

@@ -50,11 +50,11 @@ exports.getTenantDashboard = async (req, res) => {
 
         // Fetch Meter Info
         const [meterRows] = await db.query(
-            `SELECT m.id as meterId, m.meter_number, m.meter_name, 
-                    m.current_balance as balance, m.tariff_per_unit as tariff, 
-                    m.relay_status as relayStatus, m.meter_type,
-                    m.current_balance / m.tariff_per_unit as unitsRemaining
-             FROM electricity_meters m 
+            `SELECT m.id as meterId, m.meterNo, m.customerName, 
+                    m.current_balance as balance, m.relay_status, m.meter_type, m.status,
+                    p.id as propertyId, p.name as propertyName,
+                    pt.tenant_id, u.name as tenantName
+             FROM meters m 
              JOIN property_tenants pt ON m.property_id = pt.property_id
              WHERE pt.tenant_id = ? AND pt.status = 'active'
              LIMIT 1`,
@@ -134,8 +134,8 @@ exports.getTenantDashboard = async (req, res) => {
             },
             meter: meterInfo ? {
                 meterId: meterInfo.meterId,
-                meterNumber: meterInfo.meter_number,
-                meterName: meterInfo.meter_name,
+                meterNumber: meterInfo.meterNo,
+                meterName: meterInfo.customerName,
                 meterType: meterInfo.meter_type || 'prepaid',
                 balance: parseFloat(meterInfo.balance || 0),
                 unitsRemaining: parseFloat(meterInfo.unitsRemaining || 0).toFixed(2),
@@ -211,17 +211,17 @@ exports.getOwnerDashboard = async (req, res) => {
                  JOIN properties p ON pt.property_id = p.id 
                  WHERE p.owner_id = ? AND pt.status = 'active') as activeTenants,
                 (SELECT COUNT(*) 
-                 FROM electricity_meters m 
+                 FROM meters m 
                  JOIN properties p ON m.property_id = p.id 
                  WHERE p.owner_id = ?) as totalMeters,
                 (SELECT COALESCE(SUM(b.amount), 0) 
                  FROM bills b 
-                 JOIN electricity_meters m ON b.meter_id = m.id 
+                 JOIN meters m ON b.meter_id = m.id 
                  JOIN properties p ON m.property_id = p.id 
                  WHERE p.owner_id = ? AND b.status = 'pending') as pendingAmount,
                 (SELECT COALESCE(SUM(b.amount), 0) 
                  FROM bills b 
-                 JOIN electricity_meters m ON b.meter_id = m.id 
+                 JOIN meters m ON b.meter_id = m.id 
                  JOIN properties p ON m.property_id = p.id 
                  WHERE p.owner_id = ? AND b.status = 'paid' 
                  AND b.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)) as monthlyCollection
@@ -237,8 +237,8 @@ exports.getOwnerDashboard = async (req, res) => {
                 p.property_code,
                 u.name as tenantName,
                 u.mobile as tenantMobile,
-                m.id as meterId,
-                m.meter_number,
+                b.status,
+                m.meterNo,
                 m.current_balance,
                 m.relay_status,
                 pt.move_in_date,
@@ -251,7 +251,7 @@ exports.getOwnerDashboard = async (req, res) => {
             FROM properties p 
             LEFT JOIN property_tenants pt ON p.id = pt.property_id AND pt.status = 'active'
             LEFT JOIN users u ON pt.tenant_id = u.id 
-            LEFT JOIN electricity_meters m ON p.id = m.property_id
+            LEFT JOIN meters m ON p.id = m.property_id
             LEFT JOIN bills b ON m.id = b.meter_id 
                 AND b.status = 'pending' 
                 AND b.created_at = (
@@ -269,11 +269,11 @@ exports.getOwnerDashboard = async (req, res) => {
                     p.amount, 
                     p.status,
                     p.created_at as timestamp,
-                    u.name as userName,
-                    m.meter_number
+                    p.amount as amount,
+                    m.meterNo
              FROM payments p
              JOIN bills b ON p.bill_id = b.id
-             JOIN electricity_meters m ON b.meter_id = m.id
+             JOIN meters m ON b.meter_id = m.id
              JOIN properties pr ON m.property_id = pr.id
              JOIN users u ON pr.owner_id = u.id
              WHERE pr.owner_id = ?
@@ -284,8 +284,8 @@ exports.getOwnerDashboard = async (req, res) => {
                     NULL as amount,
                     pt.status,
                     pt.created_at as timestamp,
-                    u.name as userName,
-                    NULL as meter_number
+                    b.amount as amount,
+                    NULL as meterNo
              FROM property_tenants pt
              JOIN properties pr ON pt.property_id = pr.id
              JOIN users u ON pt.tenant_id = u.id
@@ -303,7 +303,7 @@ exports.getOwnerDashboard = async (req, res) => {
                 COALESCE(SUM(amount), 0) as revenue
             FROM payments p
             JOIN bills b ON p.bill_id = b.id
-            JOIN electricity_meters m ON b.meter_id = m.id
+            JOIN meters m ON b.meter_id = m.id
             JOIN properties pr ON m.property_id = pr.id
             WHERE pr.owner_id = ? 
                 AND p.status = 'success'
@@ -365,8 +365,8 @@ exports.getOwnerDashboard = async (req, res) => {
                     amount: activity.amount ? parseFloat(activity.amount) : null,
                     status: activity.status,
                     timestamp: new Date(activity.timestamp).toISOString(),
-                    userName: activity.userName,
-                    meterNumber: activity.meter_number || null,
+                    amount: parseFloat(activity.amount),
+                    meterNumber: activity.meterNo || null,
                     description: activity.type === 'payment' ?
                         `Payment of ₹${parseFloat(activity.amount || 0).toFixed(2)} by ${activity.userName}` :
                         `${activity.userName} ${activity.status === 'active' ? 'moved in' : 'moved out'}`
@@ -402,7 +402,7 @@ exports.getMasterDashboard = async (req, res) => {
                 (SELECT COUNT(*) FROM users WHERE role = 'owner') as totalOwners,
                 (SELECT COUNT(*) FROM users WHERE role = 'master') as totalAdmins,
                 (SELECT COUNT(*) FROM properties) as totalProperties,
-                (SELECT COUNT(*) FROM electricity_meters) as totalMeters,
+                (SELECT COUNT(*) FROM meters) as totalMeters,
                 (SELECT COUNT(*) FROM property_tenants WHERE status = 'active') as activeTenancies,
                 (SELECT COALESCE(SUM(amount), 0) FROM bills WHERE status = 'pending') as totalPendingBills,
                 (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'success' 
@@ -426,7 +426,7 @@ exports.getMasterDashboard = async (req, res) => {
                 COUNT(*) as totalMeters,
                 SUM(CASE WHEN relay_status = 'on' THEN 1 ELSE 0 END) as activeMeters,
                 SUM(CASE WHEN relay_status = 'off' THEN 1 ELSE 0 END) as offlineMeters
-            FROM electricity_meters
+            FROM meters
         `);
 
         // Revenue by type
@@ -451,7 +451,7 @@ exports.getMasterDashboard = async (req, res) => {
                 COALESCE(AVG(b.amount), 0) as avgBill
             FROM properties p
             LEFT JOIN property_tenants pt ON p.id = pt.property_id AND pt.status = 'active'
-            LEFT JOIN electricity_meters m ON p.id = m.property_id
+            LEFT JOIN meters m ON p.id = m.property_id
             LEFT JOIN bills b ON m.id = b.meter_id AND b.status = 'paid'
             GROUP BY p.id
             ORDER BY totalRevenue DESC
@@ -529,7 +529,7 @@ exports.getTenantBills = async (req, res) => {
             SELECT b.id, b.amount, b.units, b.month, b.year, 
                    b.status, b.due_date, b.paid_amount, b.created_at
             FROM bills b
-            JOIN electricity_meters m ON b.meter_id = m.id
+            JOIN meters m ON b.meter_id = m.id
             JOIN property_tenants pt ON m.property_id = pt.property_id
             WHERE pt.tenant_id = ? 
             ORDER BY b.year DESC, b.month DESC
@@ -562,11 +562,11 @@ exports.getOwnerTenants = async (req, res) => {
         const [tenants] = await db.query(`
             SELECT DISTINCT u.id, u.name, u.mobile, u.email,
                    p.name as propertyName, pt.move_in_date, pt.status,
-                   m.meter_number, m.current_balance
+                   m.meterNo, m.current_balance
             FROM users u
             JOIN property_tenants pt ON u.id = pt.tenant_id
             JOIN properties p ON pt.property_id = p.id
-            LEFT JOIN electricity_meters m ON p.id = m.property_id
+            LEFT JOIN meters m ON p.id = m.property_id
             WHERE p.owner_id = ?
             ORDER BY pt.created_at DESC
         `, [ownerId]);

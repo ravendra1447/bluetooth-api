@@ -12,7 +12,7 @@ router.get('/tenant/owner/:ownerId', async (req, res) => {
              FROM users u
              JOIN property_tenants pt ON u.id = pt.tenant_id
              JOIN properties p ON pt.property_id = p.id
-             LEFT JOIN electricity_meters m ON p.id = m.property_id
+             LEFT JOIN meters m ON p.id = m.property_id
              LEFT JOIN bills b ON m.id = b.meter_id AND b.status = 'pending'
              WHERE p.owner_id = ? AND u.role = 'tenant'
              GROUP BY u.id, u.name, u.mobile, p.name, pt.move_in_date, pt.status`,

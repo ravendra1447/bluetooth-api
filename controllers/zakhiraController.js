@@ -43,10 +43,10 @@ exports.checkMeter = async (req, res) => {
             SELECT pt.tenant_id, pt.status as tenant_status, 
                    m.meter_number, m.meter_name,
                    p.name as property_name
-            FROM electricity_meters m
+            FROM meters m
             LEFT JOIN property_tenants pt ON m.property_id = pt.property_id AND pt.status = 'active'
             LEFT JOIN properties p ON m.property_id = p.id
-            WHERE m.meter_number = ?
+            WHERE m.meterNo = ?
         `, [meterId]);
 
         if (meters.length === 0) {
@@ -102,7 +102,7 @@ exports.bindMeter = async (req, res) => {
 
         // Check if meter exists
         const [existingMeters] = await connection.query(
-            `SELECT id, property_id FROM electricity_meters WHERE meter_number = ?`,
+            `SELECT id, property_id FROM meters WHERE meterNo = ?`,
             [validatedMeterId]
         );
 
@@ -182,8 +182,8 @@ exports.bindMeter = async (req, res) => {
             propertyId = propertyResult.insertId;
 
             await connection.query(
-                `INSERT INTO electricity_meters 
-                 (property_id, meter_name, meter_number, meter_type, current_balance, tariff_per_unit, relay_status) 
+                `INSERT INTO meters 
+                 (property_id, customerName, meterNo, meterType, current_balance, tariff_per_unit, relayStatus) 
                  VALUES (?, ?, ?, ?, ?, ?, 'on')`,
                 [propertyId, 'Main Meter', validatedMeterId, meterType, 0.0, 5.0]
             );
@@ -246,11 +246,11 @@ exports.getDashboard = async (req, res) => {
         const [rows] = await db.query(`
             SELECT m.*, p.name as property_name, 
                    u.name as tenant_name, u.mobile as tenant_mobile
-            FROM electricity_meters m
+            FROM meters m
             LEFT JOIN properties p ON m.property_id = p.id
             LEFT JOIN property_tenants pt ON p.id = pt.property_id AND pt.status = 'active'
             LEFT JOIN users u ON pt.tenant_id = u.id
-            WHERE m.meter_number = ?
+            WHERE m.meterNo = ?
         `, [meterId]);
 
         if (rows.length === 0) {
@@ -337,7 +337,7 @@ exports.getConsumption = async (req, res) => {
 
         // First verify meter exists
         const [meterCheck] = await db.query(
-            `SELECT id FROM electricity_meters WHERE meter_number = ?`,
+            `SELECT id FROM meters WHERE meterNo = ?`,
             [meterId]
         );
 
@@ -426,7 +426,7 @@ exports.getSchedule = async (req, res) => {
 
         // Verify meter exists
         const [meterCheck] = await db.query(
-            `SELECT id FROM electricity_meters WHERE meter_number = ?`,
+            `SELECT id FROM meters WHERE meterNo = ?`,
             [meterId]
         );
 
@@ -477,7 +477,7 @@ exports.updateSchedule = async (req, res) => {
 
         // Verify meter exists
         const [meterCheck] = await db.query(
-            `SELECT id FROM electricity_meters WHERE meter_number = ?`,
+            `SELECT id FROM meters WHERE meterNo = ?`,
             [meterId]
         );
 
@@ -562,7 +562,7 @@ exports.getHistory = async (req, res) => {
 
         // Verify meter exists
         const [meterCheck] = await db.query(
-            `SELECT id FROM electricity_meters WHERE meter_number = ?`,
+            `SELECT id FROM meters WHERE meterNo = ?`,
             [meterId]
         );
 
@@ -662,7 +662,7 @@ exports.getEvents = async (req, res) => {
 
         // Verify meter exists
         const [meterCheck] = await db.query(
-            `SELECT id FROM electricity_meters WHERE meter_number = ?`,
+            `SELECT id FROM meters WHERE meterNo = ?`,
             [meterId]
         );
 
@@ -742,7 +742,7 @@ exports.getProfile = async (req, res) => {
 
         const [metersCount] = await db.query(`
             SELECT COUNT(DISTINCT m.id) as count 
-            FROM electricity_meters m 
+            FROM meters m 
             JOIN property_tenants pt ON m.property_id = pt.property_id 
             WHERE pt.tenant_id = ? AND pt.status = 'active'
         `, [userId]);
@@ -750,7 +750,7 @@ exports.getProfile = async (req, res) => {
         const [activeMeters] = await db.query(`
             SELECT m.meter_number, m.meter_name, m.current_balance, m.relay_status,
                    p.name as property_name
-            FROM electricity_meters m 
+            FROM meters m 
             JOIN property_tenants pt ON m.property_id = pt.property_id 
             JOIN properties p ON m.property_id = p.id
             WHERE pt.tenant_id = ? AND pt.status = 'active'
@@ -817,7 +817,7 @@ exports.recharge = async (req, res) => {
 
         // Check if meter exists
         const [meterRows] = await connection.query(
-            `SELECT id, current_balance, meter_number FROM electricity_meters WHERE meter_number = ?`,
+            `SELECT id, current_balance, meterNo FROM meters WHERE meterNo = ?`,
             [validatedMeterId]
         );
 
@@ -834,7 +834,7 @@ exports.recharge = async (req, res) => {
 
         // Update meter balance
         await connection.query(
-            `UPDATE electricity_meters 
+            `UPDATE meters 
              SET current_balance = current_balance + ?, updated_at = NOW() 
              WHERE id = ?`,
             [amount, meterId_db]
@@ -862,7 +862,7 @@ exports.recharge = async (req, res) => {
 
         // Get updated balance
         const [updatedMeter] = await connection.query(
-            `SELECT current_balance FROM electricity_meters WHERE id = ?`,
+            `SELECT current_balance FROM meters WHERE id = ?`,
             [meterId_db]
         );
 

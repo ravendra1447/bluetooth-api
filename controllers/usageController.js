@@ -8,8 +8,8 @@ exports.getDailyUsage = async (req, res) => {
     const [data] = await db.query(
       `SELECT d.reading_date as date, d.total_reading as totalReading, d.daily_consumption as dailyConsumption 
        FROM daily_readings d
-       JOIN electricity_meters m ON d.meter_id = m.id
-       WHERE m.meter_number = ? 
+       JOIN meters m ON d.meter_id = m.id
+       WHERE m.meterNo = ? 
        ORDER BY d.reading_date DESC LIMIT 30`,
       [meterId]
     );
@@ -27,8 +27,8 @@ exports.getUsageSummary = async (req, res) => {
     const [readings] = await db.query(
       `SELECT d.reading_date, d.daily_consumption 
        FROM daily_readings d
-       JOIN electricity_meters m ON d.meter_id = m.id
-       WHERE m.meter_number = ? AND d.reading_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) 
+       JOIN meters m ON d.meter_id = m.id
+       WHERE m.meterNo = ? AND d.reading_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) 
        ORDER BY d.reading_date DESC`,
       [meterId]
     );
@@ -72,7 +72,7 @@ exports.getUsageSummary = async (req, res) => {
 exports.getMonthlyUsage = async (req, res) => {
   try {
     const { meterId } = req.params;
-    const [meter] = await db.query(`SELECT * FROM electricity_meters WHERE meter_number = ?`, [meterId]);
+    const [meter] = await db.query(`SELECT * FROM meters WHERE meterNo = ?`, [meterId]);
     
     if (meter.length === 0) return res.json({ success: false, message: 'Meter not found' });
     
@@ -93,7 +93,7 @@ exports.getMonthlyUsage = async (req, res) => {
 
 exports.monthlyFreeze = async (req, res) => {
   try {
-    const [meters] = await db.query(`SELECT * FROM electricity_meters WHERE status='active'`);
+    const [meters] = await db.query(`SELECT * FROM meters WHERE status='active'`);
 
     for (const meter of meters) {
       const endReading = meter.last_reading || 0;
@@ -120,7 +120,7 @@ exports.monthlyFreeze = async (req, res) => {
       );
 
       await db.query(
-        `UPDATE electricity_meters SET month_start_reading = ?, monthly_consumption = 0, outstanding = ? WHERE id = ?`,
+        `UPDATE meters SET month_start_reading = ?, monthly_consumption = 0, outstanding = ? WHERE id = ?`,
         [endReading, outstanding, meter.id]
       );
     }

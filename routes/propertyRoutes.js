@@ -11,7 +11,7 @@ router.get('/property/owner/:ownerId', async (req, res) => {
              FROM properties p
              LEFT JOIN property_tenants pt ON p.id = pt.property_id AND pt.status = 'active'
              LEFT JOIN users u ON pt.tenant_id = u.id
-             LEFT JOIN electricity_meters m ON p.id = m.property_id
+             LEFT JOIN meters m ON p.id = m.property_id
              WHERE p.owner_id = ?`,
             [ownerId]
         );
