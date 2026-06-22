@@ -334,9 +334,12 @@ exports.getConsumption = async (req, res) => {
             });
         }
 
-        // First verify meter exists
+        // First verify meter exists and get tariff rate
         const [meterCheck] = await db.query(
-            `SELECT id FROM meters WHERE meterNo = ?`,
+            `SELECT m.id, m.current_balance, t.rate as tariff_rate 
+             FROM meters m 
+             LEFT JOIN tariffs t ON m.meterNo = t.meterNo 
+             WHERE m.meterNo = ?`,
             [meterId]
         );
 
@@ -348,6 +351,8 @@ exports.getConsumption = async (req, res) => {
         }
 
         const meterId_db = meterCheck[0].id;
+        const totalReading = meterCheck[0].current_balance || 0;
+        const tariffRate = meterCheck[0].tariff_rate || 10.0;
 
         let bills = [];
         try {
@@ -397,6 +402,8 @@ exports.getConsumption = async (req, res) => {
         return res.status(200).json({
             success: true,
             data: {
+                totalReading: parseFloat(totalReading.toString()),
+                tariffRate: parseFloat(tariffRate.toString()),
                 totalConsumption: parseFloat(totalConsumption.toFixed(2)),
                 averageMonthly: totalMonths > 0 ? parseFloat((totalConsumption / totalMonths).toFixed(2)) : 0,
                 totalBill: parseFloat(totalBill.toFixed(2)),
