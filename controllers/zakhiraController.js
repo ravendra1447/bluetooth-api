@@ -175,10 +175,11 @@ exports.bindMeter = async (req, res) => {
             if (ownerRows.length > 0) {
                 ownerId = ownerRows[0].id;
             } else {
-                const [newOwner] = await connection.query(
-                    `INSERT INTO users (name, mobile, password, role) VALUES ('Default Owner', '0000000000', 'password', 'owner')`
-                );
-                ownerId = newOwner.insertId;
+                await connection.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'No Master or Owner found to assign this property. Please create an owner first.'
+                });
             }
 
             const propertyCode = 'P-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
@@ -309,7 +310,7 @@ exports.getDashboard = async (req, res) => {
         try {
             [payments] = await db.query(`
                 SELECT p.amount, p.status, p.payment_method,
-                       b.bill_amount, b.units, b.month, b.year
+                       b.amount as bill_amount, b.units, b.month, b.year
                 FROM payments p 
                 JOIN bills b ON p.bill_id = b.id 
                 WHERE b.meter_id = ? 

@@ -1,8 +1,8 @@
 const cron = require('node-cron');
 const db = require('../config/db');
 
-cron.schedule('0 0 * * *', async () => {
-    console.log('Running daily cron job for outstanding check...');
+cron.schedule('45 14 * * *', async () => {
+    console.log('Running cron job at 2:45 PM for outstanding check...');
     try {
         const today = new Date().getDate();
         const dueDate = 7;
@@ -33,25 +33,33 @@ cron.schedule('0 0 * * *', async () => {
                 );
 
                 if (meter.tenantId) {
-                    await db.query(
-                        `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
-                        [
-                            meter.tenantId, 
-                            newRelayStatus === 'OFF' ? 'Relay OFF' : 'Relay ON', 
-                            newRelayStatus === 'OFF' ? 'Supply disconnected due to pending bill' : 'Supply restored', 
-                            newRelayStatus === 'OFF' ? 'danger' : 'success'
-                        ]
-                    );
+                    try {
+                        await db.query(
+                            `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
+                            [
+                                meter.tenantId, 
+                                newRelayStatus === 'OFF' ? 'Relay OFF' : 'Relay ON', 
+                                newRelayStatus === 'OFF' ? 'Supply disconnected due to pending bill' : 'Supply restored', 
+                                newRelayStatus === 'OFF' ? 'danger' : 'success'
+                            ]
+                        );
+                    } catch (notifErr) {
+                        console.log("Skipped notification insert (table might not exist):", notifErr.message);
+                    }
                 }
             }
 
             // Logic: warning on the 6th
             if (meter.outstanding > 0 && today === 6) {
                 if (meter.tenantId) {
-                    await db.query(
-                        `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
-                        [meter.tenantId, 'Final Warning', 'Recharge before tomorrow or power OFF', 'warning']
-                    );
+                    try {
+                        await db.query(
+                            `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
+                            [meter.tenantId, 'Final Warning', 'Recharge before tomorrow or power OFF', 'warning']
+                        );
+                    } catch (notifErr) {
+                        console.log("Skipped notification insert (table might not exist):", notifErr.message);
+                    }
                 }
             }
         }
