@@ -5,44 +5,54 @@ cron.schedule('0 0 * * *', async () => {
     console.log('Running daily cron job for outstanding check...');
     try {
         const today = new Date().getDate();
+        const dueDate = 7;
         
         const [meters] = await db.query(
-            `SELECT m.id, m.tenantId, b.id as billId, b.outstanding, m.disconnectDate, m.preTripDays 
+            `SELECT m.id, m.meterNo, m.outstanding, m.relayStatus, pt.tenant_id as tenantId
              FROM meters m 
-             JOIN bills b ON m.id = b.meterId 
-             WHERE b.status = 'pending' AND b.outstanding > 0`
+             LEFT JOIN property_tenants pt ON m.property_id = pt.property_id AND pt.status = 'active'`
         );
 
         for (const meter of meters) {
-            const preTripDate = meter.disconnectDate - meter.preTripDays;
+            let newRelayStatus = meter.relayStatus;
 
-            if (today === preTripDate) {
-                // Pre Trip Alarm
-                await db.query(
-                    `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
-                    [meter.tenantId, 'Pre Trip Alarm', 'Supply will disconnect soon due to pending bill', 'warning']
-                );
+            // Logic: if outstanding > 0 AND date > 7 -> OFF. If outstanding <= 0 -> ON
+            if (meter.outstanding > 0 && today > dueDate) {
+                newRelayStatus = 'OFF';
+            } else if (meter.outstanding <= 0) {
+                newRelayStatus = 'ON';
             }
 
-            if (today === meter.disconnectDate - 1) {
-                // Final Warning
+            // If status changed, update DB and save logs
+            if (newRelayStatus !== meter.relayStatus) {
+                await db.query(`UPDATE meters SET relayStatus=? WHERE id=?`, [newRelayStatus, meter.id]);
+                
                 await db.query(
-                    `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
-                    [meter.tenantId, 'Final Warning', 'Supply will be disconnected tomorrow', 'danger']
+                    `INSERT INTO relay_logs (meter_id, relay_status, reason) VALUES (?, ?, ?)`,
+                    [meter.id, newRelayStatus, newRelayStatus === 'OFF' ? 'Outstanding bill passed due date' : 'Outstanding cleared']
                 );
+
+                if (meter.tenantId) {
+                    await db.query(
+                        `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
+                        [
+                            meter.tenantId, 
+                            newRelayStatus === 'OFF' ? 'Relay OFF' : 'Relay ON', 
+                            newRelayStatus === 'OFF' ? 'Supply disconnected due to pending bill' : 'Supply restored', 
+                            newRelayStatus === 'OFF' ? 'danger' : 'success'
+                        ]
+                    );
+                }
             }
 
-            if (today >= meter.disconnectDate) {
-                // Relay OFF
-                await db.query(`UPDATE meters SET relayStatus='OFF' WHERE id=?`, [meter.id]);
-                await db.query(
-                    `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
-                    [meter.tenantId, 'Relay OFF', 'Supply disconnected due to pending bill', 'danger']
-                );
-                await db.query(
-                    `INSERT INTO relay_logs (meterId, relayStatus, reason) VALUES (?, ?, ?)`,
-                    [meter.id, 'OFF', 'Outstanding > 0 on disconnect date']
-                );
+            // Logic: warning on the 6th
+            if (meter.outstanding > 0 && today === 6) {
+                if (meter.tenantId) {
+                    await db.query(
+                        `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
+                        [meter.tenantId, 'Final Warning', 'Recharge before tomorrow or power OFF', 'warning']
+                    );
+                }
             }
         }
     } catch (err) {

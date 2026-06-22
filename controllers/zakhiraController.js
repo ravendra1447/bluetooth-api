@@ -41,7 +41,7 @@ exports.checkMeter = async (req, res) => {
 
         const [meters] = await db.query(`
             SELECT pt.tenant_id, pt.status as tenant_status, 
-                   m.meter_number, m.meter_name,
+                   m.meterNo, m.customerName,
                    p.name as property_name
             FROM meters m
             LEFT JOIN property_tenants pt ON m.property_id = pt.property_id AND pt.status = 'active'
@@ -64,8 +64,8 @@ exports.checkMeter = async (req, res) => {
             data: {
                 isBound: isBound,
                 userId: isBound ? meter.tenant_id : null,
-                meterNumber: meter.meter_number,
-                meterName: meter.meter_name,
+                meterNumber: meter.meterNo,
+                meterName: meter.customerName,
                 propertyName: meter.property_name || null,
                 tenantStatus: meter.tenant_status || null
             }
@@ -93,12 +93,14 @@ exports.bindMeter = async (req, res) => {
             email,
             address,
             password,
-            meterType = 'prepaid',
             installationDate
         } = req.body;
+        
+        // Support both camelCase and snake_case for meterType
+        const meterType = req.body.meterType || req.body.meter_type || 'prepaid';
 
         // Validate required fields
-        const validatedMeterId = validateMeterId(meterId);
+        const validatedMeterId = validateMeterId(meterId || req.body.meter_number || req.body.meter_id);
         const validatedMobile = validateMobile(mobile);
 
         // Check if meter exists
@@ -138,29 +140,27 @@ exports.bindMeter = async (req, res) => {
 
         let userId;
         let isNewUser = false;
+        
+        const validEmail = email && email.trim() !== '' ? email.trim() : null;
+        const userName = name && name.trim() !== '' ? name.trim() : 'Tenant';
 
         if (users.length === 0) {
             // Create new user
-            const validEmail = email && email.trim() !== '' ? email.trim() : null;
-            const userName = name && name.trim() !== '' ? name.trim() : 'Tenant';
-
             const [result] = await connection.query(
                 `INSERT INTO users (name, mobile, email, password, role) 
                  VALUES (?, ?, ?, ?, 'tenant')`,
-                [userName, validatedMobile, validEmail, password || 'password123']
+                [userName, validatedMobile, validEmail, 'password123']
             );
 
             userId = result.insertId;
             isNewUser = true;
         } else {
             userId = users[0].id;
-            // Update user name if provided
-            if (name && name.trim() !== '') {
-                await connection.query(
-                    `UPDATE users SET name = ? WHERE id = ?`,
-                    [name.trim(), userId]
-                );
-            }
+            // Update user details if provided
+            await connection.query(
+                `UPDATE users SET name = ?, email = ? WHERE id = ?`,
+                [userName, validEmail, userId]
+            );
         }
 
         let propertyId;
@@ -287,16 +287,16 @@ exports.getDashboard = async (req, res) => {
         }
 
         const data = {
-            meterId: meter.meter_number,
-            meterName: meter.meter_name,
+            meterId: meter.meterNo,
+            meterName: meter.customerName,
             propertyName: meter.property_name || 'N/A',
             tenantName: meter.tenant_name || 'Not Assigned',
             tenantMobile: meter.tenant_mobile || 'N/A',
             balance: parseFloat(meter.current_balance),
             remainingUnits: parseFloat((meter.current_balance / (meter.tariff_rate || 5.0)).toFixed(2)),
             tariffPerUnit: parseFloat(meter.tariff_rate || 5.0),
-            relayStatus: meter.relay_status || 'on',
-            meterType: meter.meter_type || 'prepaid',
+            relayStatus: meter.relayStatus || 'on',
+            meterType: meter.meterType || 'prepaid',
             todayConsumption: parseFloat(todayConsumption[0].today_units || 0),
             overdraftLimit: 100.00,
             overdraftActive: true,
@@ -760,7 +760,7 @@ exports.getProfile = async (req, res) => {
         `, [userId]);
 
         const [activeMeters] = await db.query(`
-            SELECT m.meter_number, m.meter_name, m.current_balance, m.relay_status,
+            SELECT m.meterNo, m.customerName, m.current_balance, m.relayStatus,
                    p.name as property_name
             FROM meters m 
             JOIN property_tenants pt ON m.property_id = pt.property_id 
@@ -779,11 +779,11 @@ exports.getProfile = async (req, res) => {
                 joinedDate: null,
                 metersCount: metersCount[0].count || 0,
                 activeMeters: activeMeters.map(m => ({
-                    meterNumber: m.meter_number,
-                    meterName: m.meter_name,
+                    meterNumber: m.meterNo,
+                    meterName: m.customerName,
                     propertyName: m.property_name,
                     balance: parseFloat(m.current_balance || 0),
-                    status: m.relay_status || 'on'
+                    status: m.relayStatus || 'on'
                 })),
                 settings: {
                     notificationsEnabled: true,

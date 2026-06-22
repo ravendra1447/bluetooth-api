@@ -179,6 +179,21 @@ async function setupDatabase() {
     `);
     console.log('✅ Monthly freeze table created');
 
+    // Create notifications table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        title VARCHAR(100),
+        message TEXT,
+        type ENUM('info', 'warning', 'danger', 'success') DEFAULT 'info',
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('✅ Notifications table created');
+
     // Alter meters to add necessary columns (already added in CREATE TABLE but keeping try/catch if needed)
     try {
       await connection.query(`
