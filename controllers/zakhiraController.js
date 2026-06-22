@@ -888,3 +888,43 @@ exports.recharge = async (req, res) => {
         connection.release();
     }
 };
+
+// POST /api/meter/relay
+exports.controlRelay = async (req, res) => {
+    try {
+        const { meterId, action } = req.body;
+
+        if (!['on', 'off'].includes(action)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid action'
+            });
+        }
+
+        const [meter] = await db.query(
+            `SELECT id FROM meters WHERE meterNo = ?`,
+            [meterId]
+        );
+
+        if (meter.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Meter not found'
+            });
+        }
+
+        await db.query(
+            `UPDATE meters SET relayStatus = ? WHERE id = ?`,
+            [action, meter[0].id]
+        );
+
+        return res.json({
+            success: true,
+            message: `Relay turned ${action}`
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ success: false });
+    }
+};

@@ -12,5 +12,6 @@ router.get('/history/:meterId', zakhiraController.getHistory);
 router.get('/events/:meterId', zakhiraController.getEvents);
 router.get('/profile/:userId', zakhiraController.getProfile);
 router.post('/recharge', zakhiraController.recharge);
+router.post('/relay', zakhiraController.controlRelay);
 
 module.exports = router;
