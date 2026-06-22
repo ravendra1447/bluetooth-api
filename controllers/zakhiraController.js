@@ -285,8 +285,8 @@ exports.getDashboard = async (req, res) => {
             relayStatus: meter.relayStatus || 'on',
             meterType: meter.meterType || 'prepaid',
             todayConsumption: parseFloat(todayConsumption[0].today_units || 0),
-            overdraftLimit: 100.00,
-            overdraftActive: true,
+            overdraftLimit: 0.00,
+            overdraftActive: false,
             disconnectSchedule: 'Not Set',
             lastSync: new Date().toISOString()
         };
