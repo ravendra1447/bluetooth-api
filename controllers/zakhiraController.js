@@ -733,7 +733,8 @@ exports.getProfile = async (req, res) => {
         }
 
         const [users] = await db.query(
-            `SELECT id, name, mobile, email, role FROM users WHERE id = ?`,
+            `SELECT id, name, mobile, email, role, notifications_enabled 
+             FROM users WHERE id = ?`,
             [userId]
         );
 
@@ -780,7 +781,7 @@ exports.getProfile = async (req, res) => {
                     status: m.relayStatus || 'on'
                 })),
                 settings: {
-                    notificationsEnabled: true,
+                    notificationsEnabled: user.notifications_enabled == 1,
                     language: 'English',
                     version: '1.0.0'
                 }
@@ -789,6 +790,28 @@ exports.getProfile = async (req, res) => {
 
     } catch (error) {
         return handleError(res, error, error.message.includes('required') ? 400 : 500);
+    }
+};
+
+/**
+ * POST /api/v1/tenant/profile/notifications
+ * Toggle notifications
+ */
+exports.toggleNotifications = async (req, res) => {
+    try {
+        const { userId, notificationsEnabled } = req.body;
+        if (!userId) {
+            return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+        
+        await db.query(
+            `UPDATE users SET notifications_enabled = ? WHERE id = ?`,
+            [notificationsEnabled ? 1 : 0, userId]
+        );
+        
+        return res.json({ success: true, message: 'Notification settings updated' });
+    } catch (error) {
+        return handleError(res, error);
     }
 };
 

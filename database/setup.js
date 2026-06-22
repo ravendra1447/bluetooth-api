@@ -27,6 +27,7 @@ async function setupDatabase() {
         email VARCHAR(255) UNIQUE,
         password VARCHAR(255) NOT NULL,
         role ENUM('master', 'owner', 'tenant') DEFAULT 'tenant',
+        notifications_enabled BOOLEAN DEFAULT TRUE,
         is_active TINYINT(1) DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -208,6 +209,19 @@ async function setupDatabase() {
         console.log('ℹ️ Columns already exist in meters');
       } else {
         console.error('⚠️ Error altering meters:', e.message);
+      }
+    }
+    try {
+      await connection.query(`
+        ALTER TABLE users 
+        ADD COLUMN notifications_enabled BOOLEAN DEFAULT TRUE
+      `);
+      console.log('✅ Users altered successfully (notifications_enabled)');
+    } catch (e) {
+      if (e.code === 'ER_DUP_FIELDNAME') {
+        console.log('ℹ️ Columns already exist in users');
+      } else {
+        console.error('⚠️ Error altering users:', e.message);
       }
     }
 
