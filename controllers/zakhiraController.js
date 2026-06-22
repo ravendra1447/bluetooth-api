@@ -97,7 +97,7 @@ exports.bindMeter = async (req, res) => {
         } = req.body;
 
         // Support both camelCase and snake_case for meterType
-        const meterType = req.body.meterType || req.body.meter_type || 'non-prepaid';
+        const meterType = req.body.meterType || req.body.meter_type || 'prepaid';
 
         // Validate required fields
         const validatedMeterId = validateMeterId(meterId || req.body.meter_number || req.body.meter_id);
@@ -283,7 +283,7 @@ exports.getDashboard = async (req, res) => {
             remainingUnits: parseFloat((meter.current_balance / (meter.tariff_rate || 5.0)).toFixed(2)),
             tariffPerUnit: parseFloat(meter.tariff_rate || 5.0),
             relayStatus: meter.relayStatus || 'on',
-            meterType: meter.meterType || 'non-prepaid',
+            meterType: meter.meterType || 'prepaid',
             todayConsumption: parseFloat(todayConsumption[0].today_units || 0),
             overdraftLimit: 100.00,
             overdraftActive: true,
