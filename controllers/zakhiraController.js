@@ -166,38 +166,11 @@ exports.bindMeter = async (req, res) => {
         let propertyId;
 
         if (existingMeters.length === 0) {
-            // Create new property and meter
-            const [ownerRows] = await connection.query(
-                `SELECT id FROM users WHERE role = 'master' OR role = 'owner' LIMIT 1`
-            );
-
-            let ownerId;
-            if (ownerRows.length > 0) {
-                ownerId = ownerRows[0].id;
-            } else {
-                await connection.rollback();
-                return res.status(400).json({
-                    success: false,
-                    message: 'No Master or Owner found to assign this property. Please create an owner first.'
-                });
-            }
-
-            const propertyCode = 'P-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
-
-            const [propertyResult] = await connection.query(
-                `INSERT INTO properties (owner_id, property_code, name, address, city) 
-                 VALUES (?, ?, ?, ?, 'City')`,
-                [ownerId, propertyCode, `Property for ${validatedMeterId}`, address || 'No Address']
-            );
-
-            propertyId = propertyResult.insertId;
-
-            await connection.query(
-                `INSERT INTO meters 
-                 (property_id, customerName, meterNo, meterType, current_balance, relayStatus) 
-                 VALUES (?, ?, ?, ?, ?, 'on')`,
-                [propertyId, 'Main Meter', validatedMeterId, meterType, 0.0]
-            );
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Meter is not registered. Please ask the property owner to register this meter first.'
+            });
         } else {
             propertyId = existingMeters[0].property_id;
         }
