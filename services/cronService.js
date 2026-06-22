@@ -1,12 +1,12 @@
 const cron = require('node-cron');
 const db = require('../config/db');
 
-cron.schedule('0 15 * * *', async () => {
-    console.log('Running cron job at 3:00 PM for outstanding check...');
+cron.schedule('0 0 * * *', async () => {
+    console.log('Running daily cron job for outstanding check...');
     try {
         const today = new Date().getDate();
         const dueDate = 7;
-        
+
         const [meters] = await db.query(
             `SELECT m.id, m.meterNo, m.outstanding, m.relayStatus, pt.tenant_id as tenantId
              FROM meters m 
@@ -26,7 +26,7 @@ cron.schedule('0 15 * * *', async () => {
             // If status changed, update DB and save logs
             if (newRelayStatus !== meter.relayStatus) {
                 await db.query(`UPDATE meters SET relayStatus=? WHERE id=?`, [newRelayStatus, meter.id]);
-                
+
                 await db.query(
                     `INSERT INTO relay_logs (meter_id, relay_status, reason) VALUES (?, ?, ?)`,
                     [meter.id, newRelayStatus, newRelayStatus === 'OFF' ? 'Outstanding bill passed due date' : 'Outstanding cleared']
@@ -37,9 +37,9 @@ cron.schedule('0 15 * * *', async () => {
                         await db.query(
                             `INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)`,
                             [
-                                meter.tenantId, 
-                                newRelayStatus === 'OFF' ? 'Relay OFF' : 'Relay ON', 
-                                newRelayStatus === 'OFF' ? 'Supply disconnected due to pending bill' : 'Supply restored', 
+                                meter.tenantId,
+                                newRelayStatus === 'OFF' ? 'Relay OFF' : 'Relay ON',
+                                newRelayStatus === 'OFF' ? 'Supply disconnected due to pending bill' : 'Supply restored',
                                 newRelayStatus === 'OFF' ? 'danger' : 'success'
                             ]
                         );
