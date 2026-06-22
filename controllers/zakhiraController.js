@@ -143,13 +143,14 @@ exports.bindMeter = async (req, res) => {
 
         const validEmail = email && email.trim() !== '' ? email.trim() : null;
         const userName = name && name.trim() !== '' ? name.trim() : 'Tenant';
+        const userRole = req.body.role && req.body.role.trim() !== '' ? req.body.role.trim() : 'tenant';
 
         if (users.length === 0) {
             // Create new user
             const [result] = await connection.query(
-                `INSERT INTO users (name, mobile, email, password, role) 
-                 VALUES (?, ?, ?, ?, 'tenant')`,
-                [userName, validatedMobile, validEmail, 'password123']
+                `INSERT INTO users (name, mobile, email, role) 
+                 VALUES (?, ?, ?, ?)`,
+                [userName, validatedMobile, validEmail, userRole]
             );
 
             userId = result.insertId;
@@ -166,11 +167,23 @@ exports.bindMeter = async (req, res) => {
         let propertyId;
 
         if (existingMeters.length === 0) {
-            await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: 'Meter is not registered. Please ask the property owner to register this meter first.'
-            });
+            // Dynamically create new property and meter using the current user's ID as owner
+            const propertyCode = 'P-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
+
+            const [propertyResult] = await connection.query(
+                `INSERT INTO properties (owner_id, property_code, name, address, city) 
+                 VALUES (?, ?, ?, ?, 'City')`,
+                [userId, propertyCode, `Property for ${validatedMeterId}`, address || 'No Address']
+            );
+
+            propertyId = propertyResult.insertId;
+
+            await connection.query(
+                `INSERT INTO meters 
+                 (property_id, customerName, meterNo, meterType, current_balance, relayStatus) 
+                 VALUES (?, ?, ?, ?, ?, 'on')`,
+                [propertyId, 'Main Meter', validatedMeterId, meterType, 0.0]
+            );
         } else {
             propertyId = existingMeters[0].property_id;
         }
