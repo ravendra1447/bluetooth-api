@@ -95,7 +95,7 @@ exports.bindMeter = async (req, res) => {
             password,
             installationDate
         } = req.body;
-        
+
         // Support both camelCase and snake_case for meterType
         const meterType = req.body.meterType || req.body.meter_type || 'prepaid';
 
@@ -140,7 +140,7 @@ exports.bindMeter = async (req, res) => {
 
         let userId;
         let isNewUser = false;
-        
+
         const validEmail = email && email.trim() !== '' ? email.trim() : null;
         const userName = name && name.trim() !== '' ? name.trim() : 'Tenant';
 
@@ -170,7 +170,7 @@ exports.bindMeter = async (req, res) => {
             const [ownerRows] = await connection.query(
                 `SELECT id FROM users WHERE role = 'master' OR role = 'owner' LIMIT 1`
             );
-            
+
             let ownerId;
             if (ownerRows.length > 0) {
                 ownerId = ownerRows[0].id;
@@ -297,7 +297,7 @@ exports.getDashboard = async (req, res) => {
             remainingUnits: parseFloat((meter.current_balance / (meter.tariff_rate || 5.0)).toFixed(2)),
             tariffPerUnit: parseFloat(meter.tariff_rate || 5.0),
             relayStatus: meter.relayStatus || 'on',
-            meterType: meter.meterType || 'prepaid',
+            meterType: meter.meterType || 'non-prepaid',
             todayConsumption: parseFloat(todayConsumption[0].today_units || 0),
             overdraftLimit: 100.00,
             overdraftActive: true,
@@ -603,8 +603,8 @@ exports.getHistory = async (req, res) => {
         let payments = [];
         try {
             [payments] = await db.query(`
-                SELECT p.amount, p.status, p.payment_method,
-                       b.bill_amount, b.units, b.month, b.year
+                SELECT p.id, p.amount, p.status, p.payment_method, p.created_at,
+                       b.amount as bill_amount, b.units, b.month, b.year
                 FROM payments p 
                 LEFT JOIN bills b ON p.bill_id = b.id 
                 WHERE b.meter_id = ?
