@@ -1,8 +1,8 @@
 const cron = require('node-cron');
 const db = require('../config/db');
 
-cron.schedule('45 14 * * *', async () => {
-    console.log('Running cron job at 2:45 PM for outstanding check...');
+cron.schedule('0 15 * * *', async () => {
+    console.log('Running cron job at 3:00 PM for outstanding check...');
     try {
         const today = new Date().getDate();
         const dueDate = 7;
