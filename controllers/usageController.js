@@ -139,3 +139,82 @@ exports.monthlyFreeze = async (req, res) => {
     }
   }
 };
+
+/**
+ * Sync Live Reading from Meter to Database
+ * POST /api/usage/sync-reading
+ */
+exports.syncReading = async (req, res) => {
+  try {
+    const { meterId, reading } = req.body;
+    
+    if (!meterId || reading == null) {
+      return res.status(400).json({ success: false, message: 'Meter ID and reading are required' });
+    }
+
+    const [meters] = await db.query('SELECT * FROM meters WHERE meterNo = ?', [meterId]);
+    if (meters.length === 0) {
+      return res.status(404).json({ success: false, message: 'Meter not found' });
+    }
+
+    const meter = meters[0];
+    const meterDbId = meter.id;
+    const currentReading = parseFloat(reading);
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get previous reading to calculate exact consumption since last sync
+    const lastReading = parseFloat(meter.last_reading || 0);
+    let consumptionSinceLastSync = 0;
+    if (currentReading >= lastReading && lastReading > 0) {
+      consumptionSinceLastSync = currentReading - lastReading;
+    }
+
+    // Get Tariff
+    const [tariffs] = await db.query('SELECT rate FROM tariffs WHERE meterNo = ? ORDER BY effectiveFrom DESC LIMIT 1', [meterId]);
+    const rate = tariffs.length > 0 ? parseFloat(tariffs[0].rate) : 5.0; // Default rate
+
+    // If there is consumption, update the prepaid balance and outstanding
+    if (consumptionSinceLastSync > 0) {
+      const cost = consumptionSinceLastSync * rate;
+      const newBalance = parseFloat(meter.current_balance || 0) - cost;
+      const newOutstanding = parseFloat(meter.outstanding || 0) + cost;
+
+      await db.query(
+        'UPDATE meters SET current_balance = ?, outstanding = ?, last_reading = ? WHERE id = ?',
+        [newBalance, newOutstanding, currentReading, meterDbId]
+      );
+    } else {
+      await db.query('UPDATE meters SET last_reading = ? WHERE id = ?', [currentReading, meterDbId]);
+    }
+
+    // Manage daily_readings
+    const [dailyReadings] = await db.query(
+      'SELECT * FROM daily_readings WHERE meter_id = ? AND reading_date = ?',
+      [meterDbId, today]
+    );
+
+    if (dailyReadings.length > 0) {
+      // Update existing daily reading
+      const dailyRecord = dailyReadings[0];
+      const startOfDayReading = parseFloat(dailyRecord.total_reading) - parseFloat(dailyRecord.daily_consumption);
+      let newDailyConsumption = currentReading - startOfDayReading;
+      if (newDailyConsumption < 0) newDailyConsumption = 0;
+
+      await db.query(
+        'UPDATE daily_readings SET total_reading = ?, daily_consumption = ? WHERE id = ?',
+        [currentReading, newDailyConsumption, dailyRecord.id]
+      );
+    } else {
+      // Insert new daily reading
+      await db.query(
+        'INSERT INTO daily_readings (meter_id, reading_date, total_reading, daily_consumption) VALUES (?, ?, ?, ?)',
+        [meterDbId, today, currentReading, consumptionSinceLastSync]
+      );
+    }
+
+    return res.json({ success: true, message: 'Reading synced successfully' });
+  } catch (err) {
+    console.error('Error syncing reading:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};

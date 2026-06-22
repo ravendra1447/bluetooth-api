@@ -284,6 +284,8 @@ exports.getDashboard = async (req, res) => {
             tariffPerUnit: parseFloat(meter.tariff_rate || 5.0),
             relayStatus: meter.relayStatus || 'on',
             meterType: meter.meterType || 'prepaid',
+            meterModel: meter.meterModel || 'DDZY1218',
+            manufacturer: meter.manufacturer || 'Jiangsu Saving Electronics Co., Ltd.',
             todayConsumption: parseFloat(todayConsumption[0].today_units || 0),
             overdraftLimit: (meter.relayStatus || 'on').toLowerCase() === 'on' ? 100.00 : 0.00,
             overdraftActive: (meter.relayStatus || 'on').toLowerCase() === 'on',
@@ -923,7 +925,14 @@ exports.recharge = async (req, res) => {
 // POST /api/meter/relay
 exports.controlRelay = async (req, res) => {
     try {
-        const { meterId, action } = req.body;
+        const meterId = req.body.meterId;
+        const actionInput = req.body.action || req.body.relay;
+        
+        if (!actionInput) {
+            return res.status(400).json({ success: false, message: 'Action required' });
+        }
+        
+        const action = actionInput.toLowerCase();
 
         if (!['on', 'off'].includes(action)) {
             return res.status(400).json({
@@ -944,9 +953,16 @@ exports.controlRelay = async (req, res) => {
             });
         }
 
+        const meterDbId = meter[0].id;
+
         await db.query(
             `UPDATE meters SET relayStatus = ? WHERE id = ?`,
-            [action, meter[0].id]
+            [action, meterDbId]
+        );
+
+        await db.query(
+            `INSERT INTO relay_logs (meter_id, relay_status, reason) VALUES (?, ?, ?)`,
+            [meterDbId, action.toUpperCase(), 'User requested via API']
         );
 
         return res.json({

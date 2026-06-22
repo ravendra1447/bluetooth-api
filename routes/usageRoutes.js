@@ -6,5 +6,6 @@ router.get('/usage/daily/:meterId', usageController.getDailyUsage);
 router.get('/usage/monthly/:meterId', usageController.getMonthlyUsage);
 router.get('/usage/summary/:meterId', usageController.getUsageSummary);
 router.post('/freeze/monthly', usageController.monthlyFreeze);
+router.post('/sync-reading', usageController.syncReading);
 
 module.exports = router;

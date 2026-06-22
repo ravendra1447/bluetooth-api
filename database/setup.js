@@ -89,6 +89,8 @@ async function setupDatabase() {
         month_start_reading DECIMAL(12,2) DEFAULT 0,
         monthly_consumption DECIMAL(12,2) DEFAULT 0,
         outstanding DECIMAL(12,2) DEFAULT 0,
+        meterModel VARCHAR(100) DEFAULT 'DDZY1218',
+        manufacturer VARCHAR(255) DEFAULT 'Jiangsu Saving Electronics Co., Ltd.',
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
@@ -180,6 +182,21 @@ async function setupDatabase() {
     `);
     console.log('✅ Monthly freeze table created');
 
+    // Create daily_readings table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS daily_readings (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        meter_id INT NOT NULL,
+        reading_date DATE NOT NULL,
+        total_reading DECIMAL(12,2) DEFAULT 0,
+        daily_consumption DECIMAL(12,2) DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (meter_id) REFERENCES meters(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_meter_date (meter_id, reading_date)
+      )
+    `);
+    console.log('✅ Daily readings table created');
+
     // Create notifications table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS notifications (
@@ -201,7 +218,9 @@ async function setupDatabase() {
         ALTER TABLE meters 
         ADD COLUMN month_start_reading DECIMAL(12,2) DEFAULT 0,
         ADD COLUMN monthly_consumption DECIMAL(12,2) DEFAULT 0,
-        ADD COLUMN outstanding DECIMAL(12,2) DEFAULT 0
+        ADD COLUMN outstanding DECIMAL(12,2) DEFAULT 0,
+        ADD COLUMN meterModel VARCHAR(100) DEFAULT 'DDZY1218',
+        ADD COLUMN manufacturer VARCHAR(255) DEFAULT 'Jiangsu Saving Electronics Co., Ltd.'
       `);
       console.log('✅ Meters altered successfully');
     } catch (e) {
