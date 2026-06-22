@@ -99,7 +99,8 @@ exports.monthlyFreeze = async (req, res) => {
       const endReading = meter.last_reading || 0;
       const startReading = meter.month_start_reading || 0;
       const consumption = endReading - startReading;
-      const tariff = meter.tariff_per_unit || 8;
+      const [tariffRow] = await db.query('SELECT rate FROM tariffs WHERE meterNo = ?', [meter.meterNo]);
+      const tariff = (tariffRow.length > 0 ? tariffRow[0].rate : 8) || 8;
       const bill = consumption * tariff;
       const outstanding = (meter.outstanding || 0) + bill;
 
