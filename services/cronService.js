@@ -81,14 +81,14 @@ cron.schedule('59 23 * * *', async () => {
     }
 });
 
-// Test Cron Job: Cut off power at 12:50 PM today
-cron.schedule('50 12 * * *', async () => {
-    console.log('Running Test Cron at 12:50 PM: Cutting OFF relay...');
+// Test Cron Job: Cut off power at 1:10 PM today
+cron.schedule('10 13 * * *', async () => {
+    console.log('Running Test Cron at 1:10 PM: Cutting OFF relay...');
     try {
         await db.query(`UPDATE meters SET relayStatus='OFF'`);
         console.log('All meters relay status set to OFF.');
     } catch (err) {
-        console.error('Error in 12:50 OFF cron:', err);
+        console.error('Error in 1:10 PM OFF cron:', err);
     }
 });
 
