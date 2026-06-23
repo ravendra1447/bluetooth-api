@@ -290,7 +290,7 @@ exports.getDashboard = async (req, res) => {
             overdraftLimit: (meter.relayStatus || 'on').toLowerCase() === 'on' ? 100.00 : 0.00,
             overdraftActive: (meter.relayStatus || 'on').toLowerCase() === 'on',
             currency: '₹',
-            disconnectSchedule: 'Today at 12:30 PM',
+            disconnectSchedule: 'Today at 12:50 PM',
             lastSync: new Date().toISOString()
         };
 
@@ -455,7 +455,7 @@ exports.getSchedule = async (req, res) => {
             data: {
                 disconnectDay: today.getDate(),
                 disconnectDate: 'Today',
-                disconnectTime: '12:30 PM',
+                disconnectTime: '12:50 PM',
                 gracePeriod: 0,
                 powerPreservation: true,
                 autoReconnect: true,
