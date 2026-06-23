@@ -290,7 +290,7 @@ exports.getDashboard = async (req, res) => {
             overdraftLimit: (meter.relayStatus || 'on').toLowerCase() === 'on' ? 100.00 : 0.00,
             overdraftActive: (meter.relayStatus || 'on').toLowerCase() === 'on',
             currency: '₹',
-            disconnectSchedule: 'Not Set',
+            disconnectSchedule: 'Today at 12:30 PM',
             lastSync: new Date().toISOString()
         };
 
@@ -448,21 +448,15 @@ exports.getSchedule = async (req, res) => {
 
         // Get next disconnect date (7th of next month if today > 7th, else 7th of this month)
         const today = new Date();
-        let nextDisconnectDate;
-
-        if (today.getDate() > 7) {
-            nextDisconnectDate = new Date(today.getFullYear(), today.getMonth() + 1, 7);
-        } else {
-            nextDisconnectDate = new Date(today.getFullYear(), today.getMonth(), 7);
-        }
+        let nextDisconnectDate = today;
 
         return res.status(200).json({
             success: true,
             data: {
-                disconnectDay: 7,
-                disconnectDate: '7th of every month',
-                disconnectTime: '11:00 AM',
-                gracePeriod: 7,
+                disconnectDay: today.getDate(),
+                disconnectDate: 'Today',
+                disconnectTime: '12:30 PM',
+                gracePeriod: 0,
                 powerPreservation: true,
                 autoReconnect: true,
                 nextDisconnectDate: nextDisconnectDate.toISOString().split('T')[0],

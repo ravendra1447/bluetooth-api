@@ -80,3 +80,25 @@ cron.schedule('59 23 * * *', async () => {
         await usageController.monthlyFreeze();
     }
 });
+
+// Test Cron Job: Cut off power at 12:30 PM today
+cron.schedule('30 12 * * *', async () => {
+    console.log('Running Test Cron at 12:30 PM: Cutting OFF relay...');
+    try {
+        await db.query(`UPDATE meters SET relayStatus='OFF'`);
+        console.log('All meters relay status set to OFF.');
+    } catch (err) {
+        console.error('Error in 12:30 OFF cron:', err);
+    }
+});
+
+// Test Cron Job: Turn on power at 12:40 PM today
+cron.schedule('40 12 * * *', async () => {
+    console.log('Running Test Cron at 12:40 PM: Turning ON relay...');
+    try {
+        await db.query(`UPDATE meters SET relayStatus='ON'`);
+        console.log('All meters relay status set to ON.');
+    } catch (err) {
+        console.error('Error in 12:40 ON cron:', err);
+    }
+});
