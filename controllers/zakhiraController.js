@@ -240,23 +240,16 @@ exports.getDashboard = async (req, res) => {
     try {
         const meterId = validateMeterId(req.params.meterId);
 
-        // Compute Dynamic Times for 10-min slots
-        const now = new Date();
-        const minutes = now.getMinutes();
-        const slot = Math.floor(minutes / 10);
-        
-        let nextOffMinutes = (slot % 2 === 0) ? (slot + 2) * 10 : (slot + 1) * 10;
-        let nextOnMinutes = (slot % 2 === 0) ? (slot + 1) * 10 : (slot + 2) * 10;
-        
-        const formatNextTime = (baseDate, nextMins) => {
-            const d = new Date(baseDate);
-            d.setMinutes(nextMins);
-            d.setSeconds(0);
-            return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        };
-
-        const dynamicDisconnectTime = formatNextTime(now, nextOffMinutes);
-        const dynamicReconnectTime = formatNextTime(now, nextOnMinutes);
+        // Get global schedule
+        let schedule = { disconnect_date: 'Today', disconnect_time: '12:00 PM', reconnect_date: 'Today', reconnect_time: '01:00 PM' };
+        try {
+            const [scheduleRows] = await db.query('SELECT * FROM global_schedule WHERE id = 1');
+            if (scheduleRows.length > 0) {
+                schedule = scheduleRows[0];
+            }
+        } catch (err) {
+            console.error("Error fetching global schedule:", err.message);
+        }
 
         const [rows] = await db.query(`
             SELECT m.*, p.name as property_name, 
@@ -468,27 +461,24 @@ exports.getSchedule = async (req, res) => {
         const today = new Date();
         let nextDisconnectDate = today;
 
-        // Compute Dynamic Times for 10-min slots
-        const minutes = today.getMinutes();
-        const slot = Math.floor(minutes / 10);
-        
-        let nextOffMinutes = (slot % 2 === 0) ? (slot + 2) * 10 : (slot + 1) * 10;
-        let nextOnMinutes = (slot % 2 === 0) ? (slot + 1) * 10 : (slot + 2) * 10;
-        
-        const formatNextTime = (baseDate, nextMins) => {
-            const d = new Date(baseDate);
-            d.setMinutes(nextMins);
-            d.setSeconds(0);
-            return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        };
+        // Get global schedule
+        let schedule = { disconnect_date: 'Today', disconnect_time: '12:00 PM', reconnect_date: 'Today', reconnect_time: '01:00 PM' };
+        try {
+            const [scheduleRows] = await db.query('SELECT * FROM global_schedule WHERE id = 1');
+            if (scheduleRows.length > 0) {
+                schedule = scheduleRows[0];
+            }
+        } catch (err) {
+            console.error("Error fetching global schedule:", err.message);
+        }
 
         return res.status(200).json({
             success: true,
             data: {
                 disconnectDay: today.getDate(),
-                disconnectDate: 'Today',
-                disconnectTime: formatNextTime(today, nextOffMinutes),
-                reconnectTime: formatNextTime(today, nextOnMinutes),
+                disconnectDate: schedule.disconnect_date,
+                disconnectTime: schedule.disconnect_time,
+                reconnectTime: schedule.reconnect_time,
                 gracePeriod: 0,
                 powerPreservation: true,
                 autoReconnect: true,
@@ -503,64 +493,29 @@ exports.getSchedule = async (req, res) => {
 };
 
 /**
- * PUT /api/v1/tenant/meters/:meterId/schedule
- * Update schedule settings
+ * POST /api/v1/tenant/meters/:meterId/schedule (or use global endpoint)
+ * Update global schedule settings
  */
 exports.updateSchedule = async (req, res) => {
     try {
-        const meterId = validateMeterId(req.params.meterId);
-        const { disconnectDay, disconnectTime, gracePeriod, powerPreservation, autoReconnect } = req.body;
+        const { disconnectDate, disconnectTime, reconnectDate, reconnectTime } = req.body;
 
-        // Verify meter exists
-        const [meterCheck] = await db.query(
-            `SELECT id FROM meters WHERE meterNo = ?`,
-            [meterId]
+        // Save to global_schedule database
+        await db.query(
+            `UPDATE global_schedule 
+             SET disconnect_date = ?, disconnect_time = ?, reconnect_date = ?, reconnect_time = ? 
+             WHERE id = 1`,
+            [disconnectDate || 'Today', disconnectTime || '12:00 PM', reconnectDate || 'Today', reconnectTime || '01:00 PM']
         );
-
-        if (meterCheck.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Meter not found'
-            });
-        }
-
-        // Validate inputs
-        if (disconnectDay && (disconnectDay < 1 || disconnectDay > 31)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Disconnect day must be between 1 and 31'
-            });
-        }
-
-        if (disconnectTime && !/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(disconnectTime)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid time format (HH:MM)'
-            });
-        }
-
-        if (gracePeriod && (gracePeriod < 1 || gracePeriod > 30)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Grace period must be between 1 and 30 days'
-            });
-        }
-
-        // Here you would save to database if you have a schedule table
-        // For now, just return success
 
         return res.status(200).json({
             success: true,
-            message: 'Schedule updated successfully',
+            message: 'Global schedule updated successfully',
             data: {
-                updated: true,
-                settings: {
-                    disconnectDay: disconnectDay || 7,
-                    disconnectTime: disconnectTime || '11:00',
-                    gracePeriod: gracePeriod || 7,
-                    powerPreservation: powerPreservation !== undefined ? powerPreservation : true,
-                    autoReconnect: autoReconnect !== undefined ? autoReconnect : true
-                }
+                disconnectDate: disconnectDate || 'Today',
+                disconnectTime: disconnectTime || '12:00 PM',
+                reconnectDate: reconnectDate || 'Today',
+                reconnectTime: reconnectTime || '01:00 PM'
             }
         });
 

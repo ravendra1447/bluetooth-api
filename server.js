@@ -16,6 +16,7 @@ app.use('/api', require('./routes/notificationRoutes'));
 app.use('/api', require('./routes/usageRoutes'));
 app.use('/api/bluetooth', require('./routes/bluetoothRoutes'));
 app.use('/api/zakhira', require('./routes/zakhiraRoutes'));
+app.use('/api/v1/admin', require('./routes/adminRoutes'));
 
 // Start Cron Jobs
 require('./services/cronService');

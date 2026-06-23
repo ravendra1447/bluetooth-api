@@ -83,31 +83,60 @@ cron.schedule('59 23 * * *', async () => {
 
 let currentDynamicState = null;
 
-// Dynamic 10-minute alternating Test Cron
-cron.schedule('* * * * *', async () => {
-    const now = new Date();
-    const minutes = now.getMinutes();
-    const slot = Math.floor(minutes / 10);
-
-    if (slot % 2 === 0 && currentDynamicState !== "OFF") {
-        console.log("🔴 [Dynamic Cron] EVEN Slot (minutes 0-9, 20-29, 40-49) -> POWER OFF");
-        try {
-            await db.query(`UPDATE meters SET relayStatus='OFF'`);
-            currentDynamicState = "OFF";
-            console.log('All meters relay status set to OFF.');
-        } catch (err) {
-            console.error('Error in Dynamic OFF cron:', err);
-        }
+const parseTime = (timeStr) => {
+    if (!timeStr) return { hour: -1, minute: -1 };
+    const parts = timeStr.trim().split(' ');
+    const timeParts = parts[0].split(':');
+    let hour = parseInt(timeParts[0], 10);
+    const minute = parseInt(timeParts[1], 10);
+    if (parts.length > 1) {
+        if (parts[1].toUpperCase() === 'PM' && hour !== 12) hour += 12;
+        if (parts[1].toUpperCase() === 'AM' && hour === 12) hour = 0;
     }
+    return { hour, minute };
+};
 
-    if (slot % 2 === 1 && currentDynamicState !== "ON") {
-        console.log("🟢 [Dynamic Cron] ODD Slot (minutes 10-19, 30-39, 50-59) -> POWER ON");
-        try {
-            await db.query(`UPDATE meters SET relayStatus='ON'`);
-            currentDynamicState = "ON";
-            console.log('All meters relay status set to ON.');
-        } catch (err) {
-            console.error('Error in Dynamic ON cron:', err);
+// Global Schedule Cron - Checks every minute
+cron.schedule('* * * * *', async () => {
+    try {
+        const [scheduleRows] = await db.query('SELECT * FROM global_schedule WHERE id = 1');
+        if (scheduleRows.length === 0) return;
+        const schedule = scheduleRows[0];
+        
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const todayStr = now.toISOString().split('T')[0];
+
+        // Check Disconnect
+        const isDisconnectDateMatch = (schedule.disconnect_date === 'Today' || schedule.disconnect_date === todayStr);
+        const dTime = parseTime(schedule.disconnect_time);
+        
+        if (isDisconnectDateMatch && dTime.hour === currentHour && dTime.minute === currentMinute) {
+            if (currentDynamicState !== "OFF") {
+                console.log(`🔴 [Global Schedule] Time Matched: \${schedule.disconnect_time} -> POWER OFF`);
+                await db.query(`UPDATE meters SET relayStatus='OFF'`);
+                await db.query(`INSERT INTO system_logs (event_type, description) VALUES ('POWER_OFF', 'Global Schedule triggered auto cut-off for all meters at \${schedule.disconnect_time}')`);
+                currentDynamicState = "OFF";
+                console.log('All meters relay status set to OFF.');
+            }
         }
+
+        // Check Reconnect
+        const isReconnectDateMatch = (schedule.reconnect_date === 'Today' || schedule.reconnect_date === todayStr);
+        const rTime = parseTime(schedule.reconnect_time);
+
+        if (isReconnectDateMatch && rTime.hour === currentHour && rTime.minute === currentMinute) {
+            if (currentDynamicState !== "ON") {
+                console.log(`🟢 [Global Schedule] Time Matched: \${schedule.reconnect_time} -> POWER ON`);
+                await db.query(`UPDATE meters SET relayStatus='ON'`);
+                await db.query(`INSERT INTO system_logs (event_type, description) VALUES ('POWER_ON', 'Global Schedule triggered auto allow for all meters at \${schedule.reconnect_time}')`);
+                currentDynamicState = "ON";
+                console.log('All meters relay status set to ON.');
+            }
+        }
+
+    } catch (err) {
+        console.error('Error in Global Schedule cron:', err);
     }
 });
