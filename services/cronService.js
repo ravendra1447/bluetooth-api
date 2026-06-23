@@ -81,24 +81,33 @@ cron.schedule('59 23 * * *', async () => {
     }
 });
 
-// Test Cron Job: Cut off power at 1:10 PM today
-cron.schedule('10 13 * * *', async () => {
-    console.log('Running Test Cron at 1:10 PM: Cutting OFF relay...');
-    try {
-        await db.query(`UPDATE meters SET relayStatus='OFF'`);
-        console.log('All meters relay status set to OFF.');
-    } catch (err) {
-        console.error('Error in 1:10 PM OFF cron:', err);
-    }
-});
+let currentDynamicState = null;
 
-// Test Cron Job: Turn on power at 12:40 PM today
-cron.schedule('40 12 * * *', async () => {
-    console.log('Running Test Cron at 12:40 PM: Turning ON relay...');
-    try {
-        await db.query(`UPDATE meters SET relayStatus='ON'`);
-        console.log('All meters relay status set to ON.');
-    } catch (err) {
-        console.error('Error in 12:40 ON cron:', err);
+// Dynamic 10-minute alternating Test Cron
+cron.schedule('* * * * *', async () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const slot = Math.floor(minutes / 10);
+
+    if (slot % 2 === 0 && currentDynamicState !== "OFF") {
+        console.log("🔴 [Dynamic Cron] EVEN Slot (minutes 0-9, 20-29, 40-49) -> POWER OFF");
+        try {
+            await db.query(`UPDATE meters SET relayStatus='OFF'`);
+            currentDynamicState = "OFF";
+            console.log('All meters relay status set to OFF.');
+        } catch (err) {
+            console.error('Error in Dynamic OFF cron:', err);
+        }
+    }
+
+    if (slot % 2 === 1 && currentDynamicState !== "ON") {
+        console.log("🟢 [Dynamic Cron] ODD Slot (minutes 10-19, 30-39, 50-59) -> POWER ON");
+        try {
+            await db.query(`UPDATE meters SET relayStatus='ON'`);
+            currentDynamicState = "ON";
+            console.log('All meters relay status set to ON.');
+        } catch (err) {
+            console.error('Error in Dynamic ON cron:', err);
+        }
     }
 });
