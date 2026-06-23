@@ -240,6 +240,24 @@ exports.getDashboard = async (req, res) => {
     try {
         const meterId = validateMeterId(req.params.meterId);
 
+        // Compute Dynamic Times for 10-min slots
+        const now = new Date();
+        const minutes = now.getMinutes();
+        const slot = Math.floor(minutes / 10);
+        
+        let nextOffMinutes = (slot % 2 === 0) ? (slot + 2) * 10 : (slot + 1) * 10;
+        let nextOnMinutes = (slot % 2 === 0) ? (slot + 1) * 10 : (slot + 2) * 10;
+        
+        const formatNextTime = (baseDate, nextMins) => {
+            const d = new Date(baseDate);
+            d.setMinutes(nextMins);
+            d.setSeconds(0);
+            return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        };
+
+        const dynamicDisconnectTime = formatNextTime(now, nextOffMinutes);
+        const dynamicReconnectTime = formatNextTime(now, nextOnMinutes);
+
         const [rows] = await db.query(`
             SELECT m.*, p.name as property_name, 
                    u.name as tenant_name, u.mobile as tenant_mobile,
@@ -290,7 +308,7 @@ exports.getDashboard = async (req, res) => {
             overdraftLimit: (meter.relayStatus || 'on').toLowerCase() === 'on' ? 100.00 : 0.00,
             overdraftActive: (meter.relayStatus || 'on').toLowerCase() === 'on',
             currency: '₹',
-            disconnectSchedule: 'Today at 1:20 PM',
+            disconnectSchedule: `OFF: ${dynamicDisconnectTime} | ON: ${dynamicReconnectTime}`,
             lastSync: new Date().toISOString()
         };
 
@@ -450,13 +468,27 @@ exports.getSchedule = async (req, res) => {
         const today = new Date();
         let nextDisconnectDate = today;
 
+        // Compute Dynamic Times for 10-min slots
+        const minutes = today.getMinutes();
+        const slot = Math.floor(minutes / 10);
+        
+        let nextOffMinutes = (slot % 2 === 0) ? (slot + 2) * 10 : (slot + 1) * 10;
+        let nextOnMinutes = (slot % 2 === 0) ? (slot + 1) * 10 : (slot + 2) * 10;
+        
+        const formatNextTime = (baseDate, nextMins) => {
+            const d = new Date(baseDate);
+            d.setMinutes(nextMins);
+            d.setSeconds(0);
+            return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        };
+
         return res.status(200).json({
             success: true,
             data: {
                 disconnectDay: today.getDate(),
                 disconnectDate: 'Today',
-                disconnectTime: '1:20 PM',
-                reconnectTime: '1:30 PM',
+                disconnectTime: formatNextTime(today, nextOffMinutes),
+                reconnectTime: formatNextTime(today, nextOnMinutes),
                 gracePeriod: 0,
                 powerPreservation: true,
                 autoReconnect: true,
